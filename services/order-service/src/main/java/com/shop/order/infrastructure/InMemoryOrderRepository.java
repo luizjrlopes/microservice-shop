@@ -3,6 +3,7 @@ package com.shop.order.infrastructure;
 import com.shop.order.domain.Order;
 import org.springframework.stereotype.Repository;
 
+import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
 
 @Repository
@@ -11,6 +12,16 @@ public class InMemoryOrderRepository implements OrderRepository {
 
     @Override
     public void save(Order order) {
+        orders.put(order.getId(), order);
+    }
+
+    @Override
+    public Optional<Order> findById(String id) {
+        return Optional.ofNullable(orders.get(id));
+    }
+
+    @Override
+    public void update(Order order) {
         orders.put(order.getId(), order);
     }
 }
