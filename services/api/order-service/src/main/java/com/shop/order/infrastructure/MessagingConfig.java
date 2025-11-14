@@ -12,30 +12,31 @@ import org.springframework.context.annotation.Configuration;
 
 @Configuration
 public class MessagingConfig {
-    @Bean
-    public TopicExchange orderExchange() {
-        return new TopicExchange("order.exchange");
-    }
+  @Bean
+  public TopicExchange orderExchange() {
+    return new TopicExchange("order.exchange");
+  }
 
-    @Bean
-    public Queue orderCreatedQueue() {
-        return new Queue("order.created");
-    }
+  @Bean
+  public Queue orderCreatedQueue() {
+    return new Queue("order.created");
+  }
 
-    @Bean
-    public Binding orderCreatedBinding(Queue orderCreatedQueue, TopicExchange orderExchange) {
-        return BindingBuilder.bind(orderCreatedQueue).to(orderExchange).with("order.created");
-    }
+  @Bean
+  public Binding orderCreatedBinding(Queue orderCreatedQueue, TopicExchange orderExchange) {
+    return BindingBuilder.bind(orderCreatedQueue).to(orderExchange).with("order.created");
+  }
 
-    @Bean
-    public Jackson2JsonMessageConverter jacksonConverter() {
-        return new Jackson2JsonMessageConverter();
-    }
+  @Bean
+  public Jackson2JsonMessageConverter jacksonConverter() {
+    return new Jackson2JsonMessageConverter();
+  }
 
-    @Bean
-    public RabbitTemplate rabbitTemplate(ConnectionFactory cf, Jackson2JsonMessageConverter converter) {
-        RabbitTemplate template = new RabbitTemplate(cf);
-        template.setMessageConverter(converter);
-        return template;
-    }
+  @Bean
+  public RabbitTemplate rabbitTemplate(
+      ConnectionFactory cf, Jackson2JsonMessageConverter converter) {
+    RabbitTemplate template = new RabbitTemplate(cf);
+    template.setMessageConverter(converter);
+    return template;
+  }
 }
