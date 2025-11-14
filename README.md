@@ -50,6 +50,7 @@ curl -X POST http://localhost:8080/orders \
 - [`docs/architecture.md`](docs/architecture.md): visão sistêmica, diagramas e contratos.
 - [`docs/experiments-notebooks.md`](docs/experiments-notebooks.md): governança dos experimentos de IA/LLM.
 - [`docs/restructure-plan.md`](docs/restructure-plan.md): inventário histórico do repositório.
+- [`docs/entregas-estagio.md`](docs/entregas-estagio.md): destaque das entregas do estágio, seus impactos e relação com requisitos de LLMs, MLOps e documentação.
 
 ## Estrutura do repositório
 ```
