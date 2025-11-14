@@ -51,6 +51,7 @@ curl -X POST http://localhost:8080/orders \
 - [`docs/experiments-notebooks.md`](docs/experiments-notebooks.md): governança dos experimentos de IA/LLM.
 - [`docs/restructure-plan.md`](docs/restructure-plan.md): inventário histórico do repositório.
 - [`docs/entregas-estagio.md`](docs/entregas-estagio.md): destaque das entregas do estágio, seus impactos e relação com requisitos de LLMs, MLOps e documentação.
+- [`docs/proximos-passos.md`](docs/proximos-passos.md): guia consolidado do que falta para considerar o projeto pronto para demos ou piloto.
 
 ## Estrutura do repositório
 ```
@@ -80,4 +81,4 @@ Um `Makefile` centraliza as rotinas mais comuns:
 Use `make help` para visualizar todas as metas disponíveis e parâmetros adicionais.
 
 ## Próximos passos
-Consulte [`ROADMAP.md`](ROADMAP.md) e [`CHANGELOG.md`](CHANGELOG.md) para entender prioridades e evolução. Contribuições são bem-vindas via PR seguindo as orientações do arquivo `AGENTS.md` na raiz.
+Consulte [`ROADMAP.md`](ROADMAP.md), [`CHANGELOG.md`](CHANGELOG.md) e o guia de [próximos passos](docs/proximos-passos.md) para entender prioridades, evolução e o que falta para finalizar o projeto. Contribuições são bem-vindas via PR seguindo as orientações do arquivo `AGENTS.md` na raiz.
