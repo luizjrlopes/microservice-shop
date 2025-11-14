@@ -23,7 +23,7 @@ Estas instruções aplicam-se a todo o repositório `microservice-shop`. Utilize
 Execute e documente os testes pertinentes antes de abrir PR:
 - `dotnet test` em `services/auth-service`.
 - `npm test` (ou `npm run test:unit`) em `services/catalog-service`.
-- `mvn test` em `services/order-service`.
+- `mvn test` em `services/api/order-service`.
 - `ctest` em `services/scheduler-cpp` se adicionar testes C++.
 - `npm test` em `tests/bdd` para cenários Cucumber.
 - `k6 run tests/load/checkout-k6.js` para mudanças que afetem desempenho/latência.
