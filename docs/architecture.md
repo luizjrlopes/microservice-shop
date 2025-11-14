@@ -11,15 +11,15 @@ flowchart LR
     Scheduler -->|POST /orders/{id}/confirm| OrderService
 ```
 
-- **order-service**: API HTTP que cria pedidos, persiste em memória e publica eventos.
+- **order-service** (`services/api/order-service`): API HTTP que cria pedidos, persiste em memória e publica eventos.
 - **RabbitMQ**: transporte AMQP usando exchange `order.exchange`, routing key `order.created` e fila homônima.
-- **scheduler-agent**: worker que consome `order.created` e confirma pedidos.
+- **scheduler-agent** (`services/workers/scheduler-agent`): worker que consome `order.created` e confirma pedidos.
 
 ## Componentes detalhados
 | Componente | Linguagem | Entradas | Saídas | Responsabilidade |
 | --- | --- | --- | --- | --- |
-| order-service | Java 17 (Spring Boot) | HTTP (`POST /orders`, `POST /orders/{id}/confirm`), eventos confirm (`order.created`). | HTTP 201/200, eventos `order.created`. | Orquestra ciclo de vida do pedido e dispara mensagens para automação downstream. |
-| scheduler-agent | Python 3.11 | Fila `order.created` | HTTP `POST /orders/{id}/confirm` | Automatiza a confirmação assíncrona usando o ID publicado no evento. |
+| order-service (`services/api/order-service`) | Java 17 (Spring Boot) | HTTP (`POST /orders`, `POST /orders/{id}/confirm`), eventos `order.created`. | HTTP 201/200, eventos `order.created`. | Orquestra ciclo de vida do pedido e dispara mensagens para automação downstream. |
+| scheduler-agent (`services/workers/scheduler-agent`) | Python 3.11 | Fila `order.created` | HTTP `POST /orders/{id}/confirm` | Automatiza a confirmação assíncrona usando o ID publicado no evento. |
 | tests/bdd | Node 18 + Cucumber | HTTP/API, AMQP | Relatórios de testes | Valida cenários ponta-a-ponta usando RabbitMQ real. |
 
 ## Contratos principais
@@ -41,4 +41,4 @@ flowchart LR
 ## Extensões planejadas
 - Adicionar `catalog-service`, `auth-service` e serviços de pagamento para refletir a visão completa descrita em [`docs/restructure-plan.md`](./restructure-plan.md).
 - Instrumentar métricas (Micrometer) e tracing distribuído.
-- Conectar notebooks LLM para prever demanda e sugerir promoções automatizadas (detalhes em [`docs/experiments-notebooks.md`](./experiments-notebooks.md)).
+- Conectar notebooks LLM (`ml/llm/notebooks`) para prever demanda e sugerir promoções automatizadas (detalhes em [`docs/experiments-notebooks.md`](./experiments-notebooks.md)).

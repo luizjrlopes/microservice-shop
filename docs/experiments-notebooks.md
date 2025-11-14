@@ -4,7 +4,7 @@ Este guia organiza como conduzir experimentos de IA e modelos de linguagem em to
 
 ## Estrutura recomendada
 ```
-notebooks/
+ml/llm/notebooks/
 ├── 01-demand-forecasting.ipynb
 ├── 02-order-anomaly-detection.ipynb
 └── shared/
@@ -28,7 +28,7 @@ notebooks/
 5. **Produtização** – proponha rotas claras para mover o experimento para um serviço dedicado (por exemplo, `ai-advisor-service`).
 
 ## Integração com o monorepo
-- Armazene dependências em `notebooks/requirements.txt` e utilize `pip install -r` dentro de um ambiente virtual.
+- Armazene dependências em `ml/llm/requirements.txt` e utilize `pip install -r` dentro de um ambiente virtual.
 - Versione apenas notebooks limpos (`jupyter nbconvert --ClearOutputPreprocessor.enabled=True`).
 - Referencie resultados relevantes em [`CHANGELOG.md`](../CHANGELOG.md) quando um experimento virar feature.
 

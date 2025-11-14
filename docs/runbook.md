@@ -4,7 +4,7 @@ Referência rápida para subir, observar e depurar o Microservice Shop.
 
 ## 1. Subir via Docker Compose
 ```bash
-docker compose up -d
+make compose-up
 ```
 - **RabbitMQ**: painel em `http://localhost:15672` (user: `guest` / `guest`).
 - **order-service**: healthcheck em `http://localhost:8080/actuator/health`.
@@ -12,14 +12,14 @@ docker compose up -d
 
 ### Parar e limpar
 ```bash
-docker compose down -v
+make compose-down
 ```
 Remove containers e volumes (fila limpa).
 
 ## 2. Execução manual (dev)
 1. Suba RabbitMQ (`docker compose up rabbitmq`).
-2. Em outro terminal, rode `mvn spring-boot:run` em `services/order-service`.
-3. Inicie o worker Python `python services/scheduler-agent/app.py` exportando `RABBIT_URL`/`ORDER_URL`.
+2. Em outro terminal, rode `mvn spring-boot:run` em `services/api/order-service` ou `make api-run`.
+3. Inicie o worker Python `python services/workers/scheduler-agent/app.py` (ou `make worker-run`) exportando `RABBIT_URL`/`ORDER_URL`.
 
 ## 3. Fluxos suportados
 | Fluxo | Passos |
@@ -36,7 +36,7 @@ Remove containers e volumes (fila limpa).
 ## 5. Testes & validação
 | Comando | Onde executar | Notas |
 | --- | --- | --- |
-| `mvn test` | `services/order-service` | Configurar testes unitários/integrados ao evoluir o domínio. |
+| `mvn test` | `services/api/order-service` | Configurar testes unitários/integrados ao evoluir o domínio. |
 | `npm test` | `tests/bdd` | Requer stack completa em execução; cenários usam Axios e amqplib. |
 | `docker compose logs -f` | raiz | Monitorar interação entre serviços durante os testes. |
 

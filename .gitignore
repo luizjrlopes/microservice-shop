@@ -1,0 +1,11 @@
+# Dependências instaladas localmente
+**/node_modules/
+**/.venv/
+**/__pycache__/
+
+# Dados temporários de notebooks
+ml/llm/data/
+
+# Artefatos diversos
+.env
+*.log

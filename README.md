@@ -40,9 +40,9 @@ curl -X POST http://localhost:8080/orders \
 ```
 
 ### Executando testes
-- `mvn test` em `services/order-service` (atualmente sem casos, configure ao evoluir).
-- `npm install && npm test` em `tests/bdd` (exige stack rodando).
-- Scripts adicionais estão documentados em [`docs/runbook.md`](docs/runbook.md).
+- `make api-test` roda `mvn test` em `services/api/order-service` (ainda sem casos, configure ao evoluir).
+- `make bdd-test` instala dependências e executa `npm test` em `tests/bdd` (exige stack rodando).
+- Consulte [`docs/runbook.md`](docs/runbook.md) para tarefas adicionais com o `Makefile`.
 
 ## Documentação
 - [`docs/setup.md`](docs/setup.md): dependências, variáveis e procedimentos de instalação.
@@ -54,14 +54,29 @@ curl -X POST http://localhost:8080/orders \
 ## Estrutura do repositório
 ```
 microservice-shop/
-├── docker-compose.yml      # Orquestra RabbitMQ + serviços
+├── docker-compose.yml          # Orquestra RabbitMQ + serviços
 ├── services/
-│   ├── order-service/      # API Java 17 + Spring Boot
-│   └── scheduler-agent/    # Worker Python que consome RabbitMQ
+│   ├── api/order-service/      # API Java 17 + Spring Boot
+│   └── workers/scheduler-agent/ # Worker Python que consome RabbitMQ
+├── ml/llm/                     # Notebooks e libs de experimentação IA/LLM
+├── infra/terraform/            # Ponto de partida para provisionamento IaC
 ├── tests/
-│   └── bdd/                # Cenários Cucumber em TypeScript
-└── docs/                   # Guias, arquitetura e experimentos
+│   └── bdd/                    # Cenários Cucumber em TypeScript
+└── docs/                       # Guias, arquitetura e experimentos
 ```
+
+### Scripts padronizados
+Um `Makefile` centraliza as rotinas mais comuns:
+
+| Comando | Descrição |
+| --- | --- |
+| `make compose-up` / `make compose-down` | Sobe/derruba a stack completa com Docker Compose. |
+| `make api-test` | Executa `mvn test` no `services/api/order-service`. |
+| `make worker-run` | Exporta variáveis (`RABBIT_URL`, `ORDER_URL`) e sobe o worker Python localmente. |
+| `make bdd-test` | Instala dependências e executa os testes BDD. |
+| `make llm-setup` | Instala as dependências listadas em `ml/llm/requirements.txt`. |
+
+Use `make help` para visualizar todas as metas disponíveis e parâmetros adicionais.
 
 ## Próximos passos
 Consulte [`ROADMAP.md`](ROADMAP.md) e [`CHANGELOG.md`](CHANGELOG.md) para entender prioridades e evolução. Contribuições são bem-vindas via PR seguindo as orientações do arquivo `AGENTS.md` na raiz.
