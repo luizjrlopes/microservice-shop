@@ -4,5 +4,6 @@ pandas==2.2.2
 numpy==1.26.4
 matplotlib==3.8.4
 scikit-learn==1.4.2
+joblib==1.4.2
 openai==1.23.1
 tiktoken==0.6.0

@@ -14,6 +14,6 @@ ml/llm/
 1. Crie (ou ative) um ambiente virtual Python 3.11.
 2. Instale as dependências: `make llm-setup`.
 3. Abra o ambiente interativo: `make llm-notebook` (usa Jupyter Lab apontando para `ml/llm/notebooks`).
-4. Siga as diretrizes de versionamento descritas na documentação oficial.
+4. Utilize os experimentos versionados em [`ml/experiments/`](../experiments/README.md) para manter scripts executáveis e dados compartilhados. O diretório `ml/llm/notebooks` deve conter apenas protótipos rápidos que ainda não migraram para um experimento completo.
 
 > **Dica:** mantenha dados brutos em `ml/llm/data/` (adicione ao `.gitignore`) para evitar commits acidentais.
