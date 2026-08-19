@@ -6,6 +6,7 @@ import requests
 
 RABBIT_URL = os.environ.get("RABBIT_URL", "amqp://guest:guest@localhost:5672")
 ORDER_URL = os.environ.get("ORDER_URL", "http://localhost:8080")
+REQUEST_TIMEOUT_SECONDS = float(os.environ.get("REQUEST_TIMEOUT_SECONDS", "5"))
 QUEUE_NAME = "order.created"
 
 
@@ -15,7 +16,10 @@ def on_message(channel, method, properties, body):
         order_id = data.get("id")
         if not order_id:
             return
-        requests.post(f"{ORDER_URL}/orders/{order_id}/confirm")
+        requests.post(
+            f"{ORDER_URL}/orders/{order_id}/confirm",
+            timeout=REQUEST_TIMEOUT_SECONDS,
+        )
     finally:
         channel.basic_ack(delivery_tag=method.delivery_tag)
 
