@@ -7,7 +7,10 @@ info:
     the target order.created.v1 contract before runtime adoption.
 channels:
   orderCreatedV1:
-    address: orders.events
+    address: order.created.v1
+    description: >-
+      Versioned order-created event routed through the orders.events exchange
+      by the RabbitMQ implementation.
     messages:
       orderCreatedV1:
         $ref: '#/components/messages/OrderCreatedV1'
@@ -27,7 +30,3 @@ components:
       contentType: application/json
       payload:
         $ref: './events/order-created-v1.schema.json'
-      bindings:
-        amqp:
-          routingKey: order.created.v1
-          bindingVersion: 0.3.0
