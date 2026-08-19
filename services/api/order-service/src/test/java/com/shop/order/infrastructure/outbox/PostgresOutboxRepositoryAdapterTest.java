@@ -23,7 +23,10 @@ import org.testcontainers.junit.jupiter.Testcontainers;
 @DataJpaTest
 @Testcontainers
 @AutoConfigureTestDatabase(replace = AutoConfigureTestDatabase.Replace.NONE)
-@Import({PostgresOutboxRepositoryAdapter.class, PostgresOutboxRepositoryAdapterTest.JacksonConfig.class})
+@Import({
+  PostgresOutboxRepositoryAdapter.class,
+  PostgresOutboxRepositoryAdapterTest.JacksonConfig.class
+})
 class PostgresOutboxRepositoryAdapterTest {
 
   @Container
