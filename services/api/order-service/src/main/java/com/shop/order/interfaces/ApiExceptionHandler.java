@@ -17,7 +17,8 @@ public class ApiExceptionHandler {
   }
 
   @ExceptionHandler(IllegalArgumentException.class)
-  public ResponseEntity<Map<String, String>> handleInvalidOrder(IllegalArgumentException exception) {
+  public ResponseEntity<Map<String, String>> handleInvalidOrder(
+      IllegalArgumentException exception) {
     return ResponseEntity.badRequest()
         .body(Map.of("error", "invalid_order", "message", exception.getMessage()));
   }
