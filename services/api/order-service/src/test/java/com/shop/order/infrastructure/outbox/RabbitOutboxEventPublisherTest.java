@@ -29,12 +29,20 @@ class RabbitOutboxEventPublisherTest {
               return null;
             })
         .when(template)
-        .send(eq("order.exchange"), eq("order.created"), any(Message.class), any(CorrelationData.class));
+        .send(
+            eq("order.exchange"),
+            eq("order.created"),
+            any(Message.class),
+            any(CorrelationData.class));
 
     publisher.publish(event);
 
     verify(template)
-        .send(eq("order.exchange"), eq("order.created"), any(Message.class), any(CorrelationData.class));
+        .send(
+            eq("order.exchange"),
+            eq("order.created"),
+            any(Message.class),
+            any(CorrelationData.class));
   }
 
   @Test
@@ -52,7 +60,11 @@ class RabbitOutboxEventPublisherTest {
               return null;
             })
         .when(template)
-        .send(eq("order.exchange"), eq("order.created"), any(Message.class), any(CorrelationData.class));
+        .send(
+            eq("order.exchange"),
+            eq("order.created"),
+            any(Message.class),
+            any(CorrelationData.class));
 
     assertThatThrownBy(() -> publisher.publish(event))
         .isInstanceOf(IllegalStateException.class)
