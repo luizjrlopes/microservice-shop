@@ -91,7 +91,9 @@ jobs:
         working-directory: tests/bdd
         run: npm ci
       - name: Build and start the distributed stack
-        run: docker compose up -d --build
+        run: |
+          set -o pipefail
+          docker compose up -d --build 2>&1 | tee compose-up.log
       - name: Wait for order service readiness
         run: |
           for attempt in $(seq 1 60); do
@@ -105,9 +107,25 @@ jobs:
       - name: Run end-to-end BDD scenarios
         working-directory: tests/bdd
         run: npm test
+      - name: Capture distributed stack diagnostics
+        if: always()
+        run: |
+          docker compose ps --all > compose-ps.log 2>&1 || true
+          docker compose logs --no-color > compose-services.log 2>&1 || true
+      - name: Upload integration diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: integration-bdd-diagnostics
+          path: |
+            compose-up.log
+            compose-ps.log
+            compose-services.log
+          if-no-files-found: ignore
+          retention-days: 7
       - name: Print distributed stack logs
         if: always()
-        run: docker compose logs --no-color
+        run: cat compose-services.log || true
       - name: Stop distributed stack
         if: always()
         run: docker compose down -v
