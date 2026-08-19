@@ -27,7 +27,7 @@ services:
       test: ["CMD", "rabbitmq-diagnostics", "check_running"]
       interval: 10s
       timeout: 5s
-      retries: 5
+      retries: 10
 
   order-service:
     build: ./services/api/order-service
@@ -39,6 +39,8 @@ services:
       RABBIT_PORT: "5672"
       RABBIT_USER: microservice_shop
       RABBIT_PASSWORD: microservice_shop
+      ORDERS_EXCHANGE: orders.events
+      ORDER_CREATED_ROUTING_KEY: order.created.v1
     ports:
       - "8080:8080"
     depends_on:
@@ -50,19 +52,40 @@ services:
       test: ["CMD", "curl", "-f", "http://localhost:8080/actuator/health"]
       interval: 10s
       timeout: 5s
-      retries: 10
-      start_period: 10s
+      retries: 15
+      start_period: 20s
 
   scheduler-agent:
     build: ./services/workers/scheduler-agent
     environment:
       RABBIT_URL: amqp://microservice_shop:microservice_shop@rabbitmq:5672
       ORDER_URL: http://order-service:8080
+      ORDERS_EXCHANGE: orders.events
+      ORDER_CREATED_ROUTING_KEY: order.created.v1
+      SCHEDULER_QUEUE: scheduler.order-created.v1
+      SCHEDULER_RETRY_QUEUE: scheduler.order-created.retry.v1
+      SCHEDULER_DLQ: scheduler.order-created.dlq.v1
+      SCHEDULER_RETRY_DELAY_MS: "3000"
+      SCHEDULER_MAX_RETRIES: "3"
+      METRICS_PORT: "9100"
     depends_on:
       rabbitmq:
         condition: service_healthy
       order-service:
         condition: service_healthy
+
+  prometheus:
+    image: prom/prometheus:v2.54.1
+    profiles: ["observability"]
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+    volumes:
+      - ./infra/observability/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+    ports:
+      - "9090:9090"
+    depends_on:
+      - order-service
+      - scheduler-agent
 
 volumes:
   postgres-data:
