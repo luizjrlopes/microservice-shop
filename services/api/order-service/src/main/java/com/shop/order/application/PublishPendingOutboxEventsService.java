@@ -27,7 +27,9 @@ public class PublishPendingOutboxEventsService {
     this.batchSize = batchSize;
   }
 
-  @Scheduled(fixedDelayString = "${outbox.publisher.fixed-delay-ms:1000}")
+  @Scheduled(
+      fixedDelayString = "${outbox.publisher.fixed-delay-ms:1000}",
+      initialDelayString = "${outbox.publisher.initial-delay-ms:1000}")
   public void publishPending() {
     for (var event : repository.findPending(batchSize)) {
       try {
