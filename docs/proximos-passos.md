@@ -1,40 +1,78 @@
-# Próximos passos para finalizar o projeto
+# Próximos passos
 
-Este guia detalha o que falta para considerar o Microservice Shop "pronto" para demonstrações de alto impacto ou para um piloto controlado. As iniciativas abaixo complementam o roadmap e focam no hardening do que já existe antes de abrir novas frentes.
+O primeiro ciclo de hardening do Microservice Shop foi incorporado ao fluxo principal. O projeto já possui testes unitários, processamento at-least-once, retry com atraso, DLQ, logs estruturados, validação de entrada e BDD real no CI.
 
-## 1. Concluir o escopo mínimo viável
-| Item | Objetivo | Responsável sugerido | Critérios de aceite |
-| --- | --- | --- | --- |
-| Cobertura de testes do `order-service` | Implementar unit tests para `OrderController`, `OrderService` e producers AMQP, além de um teste de integração usando Testcontainers. | Squad API | - `mvn test` com ≥70% de cobertura nas classes citadas.<br>- Build do CI verde com os novos testes. |
-| Refatorar o `scheduler-agent` | Garantir idempotência, logs estruturados e métricas básicas (tempo de confirmação, erros por minuto). | Squad Workers | - Retries configuráveis por variável de ambiente.<br>- Export de métricas no padrão Prometheus ou logs JSON com as mesmas informações. |
-| Testes BDD desacoplados de infraestrutura externa | Permitir que `npm test` rode em CI sem depender do RabbitMQ real, usando mocks ou containers efêmeros. | Chapter QA | - Pipeline CI consegue executar `make bdd-test` em < 5 min sem serviços extras.<br>- Documentação descreve as flags para rodar com stack real quando necessário. |
-| Limpeza de dependências versionadas | Remover `tests/bdd/node_modules` do controle de versão e reforçar `.gitignore`. | DevEx | - Repositório limpo após `git clean -fdx`.<br>- CI instala dependências sempre via `npm ci`. |
+A próxima evolução deve aumentar a profundidade do sistema existente, não apenas adicionar novos serviços.
 
-## 2. Expandir funcionalidades prometidas
-| Item | Objetivo | Dependências | Critérios de aceite |
-| --- | --- | --- | --- |
-| `catalog-service` | Expor `GET /products` com cache Redis e seed inicial. | Infra Redis via Compose. | - Endpoint documentado em OpenAPI.<br>- Testes unitários + integração com Redis (usando container). |
-| `auth-service` | Fornecer emissão e validação de JWT para proteger o `order-service`. | Integração com `order-service` e BDD. | - Middleware no `order-service` exigindo token.<br>- Cenário BDD cobrindo requisições autenticadas. |
-| `ai-advisor` | Consolidar notebooks em um microsserviço que gera recomendações textuais para pedidos. | Dados exportados do `order-service`. | - Endpoint `POST /advice/orders` com payload documentado.<br>- Testes de smoke + README com passos de reprodução do modelo. |
+## 1. Persistência PostgreSQL
 
-## 3. Preparar para operação contínua
-| Item | Objetivo | Entregáveis |
-| --- | --- | --- |
-| Observabilidade | Adotar OpenTelemetry nos serviços Java e Python, expondo traces e métricas padrão. | - Configuração `otel-collector` no Compose.<br>- Dashboards básicos (Grafana ou equivalente) documentados em `docs/runbook.md`. |
-| Automação de deploy | Expandir pipeline CI/CD para publicar imagens e executar smoke tests pós-deploy. | - Workflow GitHub Actions com stages `build`, `test`, `publish` e `smoke`.<br>- Checklist de rollback em `docs/runbook.md`. |
-| Governança de IA/LLM | Formalizar a passagem dos notebooks para produção (dados, versões de modelo, monitoramento). | - Processo descrito em `docs/mlops-llmops.md` com critérios de promoção.<br>- Scripts `ml/llm` versionados com tags de modelo. |
+Substituir o adapter em memória do runtime por um adapter PostgreSQL atrás de `OrderRepository`.
 
-## 4. Critérios de "pronto para demo/piloto"
-1. **Fluxo de pedidos coberto**: cenários de criação, confirmação automática e manual possuem testes unitários, integração e BDD verdes no CI.
-2. **Documentação alinhada**: README de cada serviço descreve autenticação, configurações e exemplos `curl`, e o novo escopo consta no `CHANGELOG.md`.
-3. **Observabilidade mínima**: logs estruturados + métricas básicas acessíveis via Docker Compose.
-4. **Segurança e dependências**: scanners de vulnerabilidade executam em cada pipeline e não há dependências instaladas manualmente no repositório.
-5. **IA integrada**: `ai-advisor` publicado com exemplo prático conectado ao fluxo de pedidos.
+Critérios de aceite:
 
-## 5. Sequência sugerida
-1. **Hardening** (testes, scheduler, BDD sem acoplamento e limpeza de dependências).
-2. **Serviços adicionais** (catálogo, auth e advisor) em paralelo, priorizando integrações incrementais.
-3. **Observabilidade + CI/CD** para suportar as novas peças.
-4. **Go/No-Go review** usando os critérios acima antes de divulgar o projeto a recrutadores ou stakeholders.
+- migrations versionadas;
+- pedidos sobrevivem a restart do container;
+- use cases não dependem de detalhes de SQL/JPA;
+- testes de integração executam com banco efêmero;
+- documentação registra o trade-off da estratégia escolhida.
 
-Mantenha este documento atualizado ao fechar cada item para que o status do projeto reflita a realidade durante entrevistas e apresentações.
+## 2. Testcontainers
+
+Cobrir integrações reais sem depender de infraestrutura previamente ligada.
+
+Prioridades:
+
+- RabbitMQ para publicação, retry e DLQ;
+- PostgreSQL para persistência;
+- cenário verificando reentrega e idempotência.
+
+## 3. OpenTelemetry
+
+Instrumentar API, publisher, RabbitMQ e worker.
+
+Critérios de aceite:
+
+- um pedido possui um trace correlacionável do `POST /orders` até a confirmação;
+- erros e retries aparecem associados ao mesmo contexto;
+- collector executa localmente via Compose;
+- runbook mostra como investigar uma execução completa.
+
+## 4. Métricas e operação
+
+Expor métricas que reflitam comportamento do sistema, não apenas disponibilidade de processo:
+
+- taxa de criação de pedidos;
+- tempo até confirmação;
+- quantidade de retries;
+- mensagens na DLQ;
+- profundidade das filas;
+- taxa de erro do scheduler.
+
+## 5. Contract testing
+
+Formalizar `order.created` como contrato versionado entre publisher e consumer e bloquear breaking changes no CI.
+
+## 6. Infraestrutura como código
+
+Evoluir `infra/` para um ambiente cloud reproduzível. Docker Compose continua sendo o caminho local e gratuito; a infraestrutura remota deve existir como demonstração de arquitetura e automação, não como dependência para executar o projeto.
+
+## 7. Novos bounded contexts
+
+Somente após persistência, observabilidade e contratos:
+
+- catálogo;
+- autenticação/autorização;
+- estoque/reserva, se as regras de domínio justificarem;
+- IA aplicada somente quando houver uma decisão ou análise concreta que realmente se beneficie dela.
+
+## Critério para a próxima fase
+
+Antes de adicionar outro microsserviço, o projeto deve conseguir responder claramente:
+
+1. como uma mensagem é recuperada após falha;
+2. como uma duplicata é tolerada;
+3. como um incidente é rastreado ponta a ponta;
+4. como o contrato entre serviços é protegido;
+5. como o estado sobrevive a reinícios.
+
+Essas respostas aumentam mais o valor técnico do projeto do que simplesmente aumentar a quantidade de serviços no diagrama.
