@@ -1,25 +1,93 @@
-# Roadmap
+# Roadmap — Microservice Shop
 
-Visão macro das próximas entregas para o Microservice Shop. As datas são estimativas e podem mudar conforme descobertas.
+O roadmap prioriza profundidade arquitetural antes de aumentar a quantidade de microsserviços. A regra é simples: um novo bounded context só entra quando o fluxo existente possui contratos, resiliência, testes e observabilidade suficientes para justificar a distribuição.
 
-## Q2 2024 – Fundamentos
-1. **Cobertura de testes mínima** no `order-service` (unitários + integração AMQP).
-2. **Refinamento do scheduler**: substituir lógica síncrona por confirmações idempotentes e adicionar telemetria básica.
-3. **Infra de dados para IA**: padronizar export de eventos e pipelines de dados compartilhados com notebooks (`data/`).
+## Estado atual — Event-driven core
 
-## Q3 2024 – Novos serviços e IA aplicada
-1. **Catalog-service** (Node/TypeScript) expondo `GET /products` e cache em Redis.
-2. **Auth-service** (ASP.NET Core) fornecendo JWT para proteger `order-service`.
-3. **AI Advisor**: microsserviço dedicado a recomendações, alimentado pelos notebooks de LLM; inicialmente expõe `POST /advice/orders` retornando explicações textuais.
+Concluído:
 
-## Q4 2024 – Observabilidade e automação
-1. **Tracing distribuído** com OpenTelemetry em todos os serviços.
-2. **Playbooks gerados por LLM** integrados ao scheduler (sugestões de recuperação diretamente nos logs).
-3. **Pipeline CI/CD** executando notebooks críticos em modo headless para garantir reprodutibilidade.
+- `order-service` em Java/Spring Boot com separação por camadas;
+- `scheduler-agent` em Python consumindo eventos AMQP;
+- RabbitMQ como backbone assíncrono;
+- evento `order.created` com identidade, timestamp e correlação;
+- confirmação idempotente;
+- retry com atraso e orçamento configurável;
+- Dead Letter Queue;
+- logs estruturados do worker;
+- validação de entrada HTTP;
+- testes unitários Java e Python;
+- BDD TypeScript observando HTTP + RabbitMQ + confirmação assíncrona;
+- CI com quality gate, testes, segurança e stack real em Docker Compose.
 
-## Backlog estratégico
-- Persistência real (PostgreSQL) para pedidos e histórico de eventos.
-- Suporte a múltiplas filas (dead-letter, retries) com políticas configuráveis.
-- Dashboards que combinam métricas tradicionais e insights dos modelos generativos.
+## Próxima etapa — Persistência e observabilidade
 
-Acompanhe mudanças confirmadas no [`CHANGELOG.md`](CHANGELOG.md) e utilize issues/PRs para propor replanejamentos.
+### 1. PostgreSQL como adapter do `OrderRepository`
+
+Objetivo: substituir o adapter em memória no runtime sem alterar os casos de uso.
+
+Critérios:
+
+- migrations versionadas;
+- estado preservado entre reinícios;
+- testes de integração com banco efêmero;
+- `InMemoryOrderRepository` mantido apenas quando útil para testes rápidos.
+
+### 2. OpenTelemetry
+
+Objetivo: correlacionar criação HTTP, publicação AMQP, consumo e confirmação.
+
+Critérios:
+
+- trace/correlation ID visível ponta a ponta;
+- instrumentação do Spring Boot e do worker Python;
+- collector local no Compose;
+- documentação de um trace completo no runbook.
+
+### 3. Métricas operacionais
+
+Objetivo: tornar saúde e backlog mensuráveis.
+
+Métricas prioritárias:
+
+- pedidos criados e confirmados;
+- latência de confirmação;
+- retries;
+- mensagens na DLQ;
+- profundidade das filas;
+- taxa de falha do worker.
+
+## Etapa seguinte — Infraestrutura e contratos
+
+### 4. Testcontainers
+
+Adicionar testes de integração para RabbitMQ e PostgreSQL sem depender de serviços externos permanentes.
+
+### 5. Contract testing
+
+Formalizar o contrato de `order.created` e detectar breaking changes entre publisher e consumer.
+
+### 6. Infraestrutura como código
+
+Transformar `infra/` em uma implementação reproduzível para um ambiente cloud controlado, mantendo Docker Compose como caminho local de custo zero.
+
+## Expansão de domínio — somente após o core
+
+Candidatos:
+
+- `catalog-service` para catálogo e disponibilidade;
+- autenticação/autorização para APIs externas;
+- inventory/reservation apenas se houver necessidade de consistência entre contextos;
+- um componente de IA somente se existir um problema claro em que recomendação, classificação ou análise realmente agregue valor.
+
+Adicionar serviços apenas para aumentar a contagem de caixas no diagrama não é objetivo deste projeto.
+
+## Critério de maturidade
+
+O projeto é considerado pronto para uma nova expansão quando:
+
+1. o fluxo atual é reproduzível localmente;
+2. CI executa testes unitários e ponta a ponta;
+3. falhas de consumidor não perdem eventos;
+4. mensagens irrecuperáveis são inspecionáveis em DLQ;
+5. contratos e trade-offs estão documentados;
+6. o próximo serviço resolve uma responsabilidade de domínio real, não apenas uma meta de portfólio.
