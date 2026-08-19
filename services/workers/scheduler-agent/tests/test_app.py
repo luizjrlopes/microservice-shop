@@ -9,7 +9,7 @@ def _method(tag: str) -> SimpleNamespace:
     return SimpleNamespace(delivery_tag=tag)
 
 
-def test_on_message_posts_confirmation_request(monkeypatch):
+def test_on_message_posts_confirmation_request_with_timeout(monkeypatch):
     channel = MagicMock()
     method = _method("delivery")
     order_id = "order-1"
@@ -20,7 +20,10 @@ def test_on_message_posts_confirmation_request(monkeypatch):
 
     app.on_message(channel, method, None, body)
 
-    post_mock.assert_called_once_with(f"{app.ORDER_URL}/orders/{order_id}/confirm")
+    post_mock.assert_called_once_with(
+        f"{app.ORDER_URL}/orders/{order_id}/confirm",
+        timeout=app.REQUEST_TIMEOUT_SECONDS,
+    )
     channel.basic_ack.assert_called_once_with(delivery_tag="delivery")
 
 
