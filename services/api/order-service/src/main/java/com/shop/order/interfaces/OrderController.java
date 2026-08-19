@@ -39,8 +39,7 @@ public class OrderController {
   public ResponseEntity<OrderCreatedResponse> create(@RequestBody CreateOrderRequest request) {
     Order order = createOrderService.create(request.productId(), request.quantity());
     eventPublisher.publish(order);
-    return ResponseEntity.status(HttpStatus.CREATED)
-        .body(new OrderCreatedResponse(order.getId()));
+    return ResponseEntity.status(HttpStatus.CREATED).body(new OrderCreatedResponse(order.getId()));
   }
 
   @GetMapping("/{id}")
