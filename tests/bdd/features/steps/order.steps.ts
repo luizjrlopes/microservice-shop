@@ -115,7 +115,7 @@ Then(
           },
           { noAck: false },
         )
-        .then((result) => {
+        .then((result: { consumerTag: string }) => {
           consumerTag = result.consumerTag;
         });
     });
