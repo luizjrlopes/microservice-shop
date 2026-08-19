@@ -2,12 +2,16 @@ package com.shop.order.application;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import com.shop.order.application.ports.OrderRepository;
 import com.shop.order.domain.Order;
-import com.shop.order.infrastructure.OrderRepository;
+import com.shop.order.domain.OrderNotFoundException;
+import com.shop.order.domain.OrderStatus;
 import java.util.Optional;
+import java.util.UUID;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
@@ -28,16 +32,29 @@ class ConfirmOrderServiceTest {
 
     Order confirmed = service.confirm(existing.getId());
 
-    assertThat(confirmed.getStatus()).isEqualTo("CONFIRMED");
+    assertThat(confirmed.getStatus()).isEqualTo(OrderStatus.CONFIRMED);
     verify(repository).update(existing);
   }
 
   @Test
-  void confirmThrowsWhenOrderIsMissing() {
-    when(repository.findById("missing")).thenReturn(Optional.empty());
+  void confirmIsSafeWhenOrderIsAlreadyConfirmed() {
+    Order existing = new Order("p1", 1);
+    existing.confirm();
+    when(repository.findById(existing.getId())).thenReturn(Optional.of(existing));
 
-    assertThatThrownBy(() -> service.confirm("missing"))
-        .isInstanceOf(IllegalArgumentException.class)
-        .hasMessage("Order not found");
+    Order confirmed = service.confirm(existing.getId());
+
+    assertThat(confirmed.getStatus()).isEqualTo(OrderStatus.CONFIRMED);
+    verify(repository, times(1)).update(existing);
+  }
+
+  @Test
+  void confirmThrowsWhenOrderIsMissing() {
+    UUID missing = UUID.randomUUID();
+    when(repository.findById(missing)).thenReturn(Optional.empty());
+
+    assertThatThrownBy(() -> service.confirm(missing))
+        .isInstanceOf(OrderNotFoundException.class)
+        .hasMessage("Order not found: " + missing);
   }
 }
