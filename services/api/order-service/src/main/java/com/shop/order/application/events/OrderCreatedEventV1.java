@@ -20,10 +20,7 @@ public record OrderCreatedEventV1(
         Instant.now(),
         order.getId(),
         new Payload(
-            order.getId(),
-            order.getProductId(),
-            order.getQuantity(),
-            order.getStatus().name()));
+            order.getId(), order.getProductId(), order.getQuantity(), order.getStatus().name()));
   }
 
   public record Payload(UUID orderId, String productId, int quantity, String status) {}
