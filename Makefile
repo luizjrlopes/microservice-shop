@@ -3,7 +3,11 @@ SCHEDULER_DIR := services/workers/scheduler-agent
 BDD_DIR := tests/bdd
 LLM_DIR := ml/llm
 
-.PHONY: help compose-up compose-down compose-logs lint test security         api-build api-test api-run api-lint         worker-install worker-run worker-lint worker-test         bdd-install bdd-test bdd-lint         llm-setup llm-notebook
+.PHONY: help compose-up compose-down compose-logs lint test security \
+        api-build api-test api-run api-lint \
+        worker-install worker-run worker-lint worker-test \
+        bdd-install bdd-test bdd-lint \
+        llm-setup llm-notebook
 
 help:
 	@echo "Targets disponíveis:"
@@ -21,8 +25,8 @@ help:
 	@echo "  worker-run       - Inicia o scheduler-agent localmente"
 	@echo "  worker-lint      - Executa black/ruff no scheduler-agent"
 	@echo "  worker-test      - Executa pytest no scheduler-agent"
-	@echo "  bdd-install      - Instala dependências dos testes BDD"
-	@echo "  bdd-test         - Executa npm test em tests/bdd"
+	@echo "  bdd-install      - Instala dependências BDD de forma determinística"
+	@echo "  bdd-test         - Executa os cenários BDD contra a stack em execução"
 	@echo "  bdd-lint         - Executa checagem TypeScript em tests/bdd"
 	@echo "  llm-setup        - Instala dependências dos notebooks de IA/LLM"
 	@echo "  llm-notebook     - Abre Jupyter Lab apontando para ml/llm/notebooks"
@@ -32,8 +36,8 @@ lint: api-lint worker-lint bdd-lint
 test: api-test worker-test
 
 security:
-	bandit -q -r $(SCHEDULER_DIR)
-	cd $(BDD_DIR) && npm audit --omit=dev
+	bandit -q -r $(SCHEDULER_DIR) -x $(SCHEDULER_DIR)/tests
+	cd $(BDD_DIR) && npm audit --audit-level=high
 
 compose-up:
 	docker compose up -d
@@ -70,7 +74,7 @@ worker-test:
 	PYTHONPATH=$(SCHEDULER_DIR) pytest $(SCHEDULER_DIR)/tests
 
 bdd-install:
-	cd $(BDD_DIR) && npm install
+	cd $(BDD_DIR) && npm ci
 
 bdd-test:
 	cd $(BDD_DIR) && npm test
