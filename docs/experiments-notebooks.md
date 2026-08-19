@@ -1,52 +1,84 @@
-# Guia de Notebooks e Experimentos de IA/LLM
+# Experimentos de ML e LLM
 
-Este guia organiza como conduzir experimentos de IA e modelos de linguagem em torno do Microservice Shop.
+Este documento descreve a trilha experimental separada do núcleo transacional do Microservice Shop.
 
-## Estrutura recomendada
-```
+## Estado real
+
+### Implementado
+
+O repositório possui dois experimentos de ML clássico com scripts executáveis de treino e inferência:
+
+- [`../ml/experiments/demand-forecasting`](../ml/experiments/demand-forecasting) — baseline de previsão de demanda;
+- [`../ml/experiments/order-anomaly-detection`](../ml/experiments/order-anomaly-detection) — baseline de detecção de anomalias.
+
+Os experimentos usam dados de exemplo e servem como baselines técnicos. Eles não são executados pelo fluxo principal de pedidos.
+
+### Ainda não implementado
+
+A área [`../ml/llm`](../ml/llm) possui dependências e estrutura para experimentação, mas `ml/llm/notebooks` não contém atualmente uma feature ou notebook LLM funcional versionado.
+
+Portanto, o projeto **não apresenta LLM como capacidade integrada** no estado atual.
+
+## Organização
+
+```text
 ml/
-├── llm/                 # Ambiente de notebooks ad-hoc
-│   ├── notebooks/
-│   └── requirements.txt
-└── experiments/
-    ├── demand-forecasting/
-    │   ├── data/
-    │   ├── notebooks/
-    │   ├── train.py / infer.py
-    │   └── README.md
-    └── order-anomaly-detection/
-        └── ...
+├── experiments/
+│   ├── demand-forecasting/
+│   │   ├── data/
+│   │   ├── train.py
+│   │   ├── infer.py
+│   │   └── README.md
+│   └── order-anomaly-detection/
+│       ├── data/
+│       ├── train.py
+│       ├── infer.py
+│       └── README.md
+└── llm/
+    ├── notebooks/
+    ├── requirements.txt
+    └── README.md
 ```
-- Notebooks exploratórios permanecem em `ml/llm/notebooks`.
-- Assim que um experimento amadurecer, mova notebooks limpos e scripts para `ml/experiments/<nome>/` e inclua um `README.md` com contexto, datasets e próximos passos.
-- Novos experimentos devem seguir o template de `ml/experiments/README.md`.
 
-## Fontes de dados
-1. **Eventos RabbitMQ**: utilize `docker compose logs order-service` ou conecte-se diretamente à fila `order.created` para exportar amostras.
-2. **APIs REST**: gere datasets via scripts que chamam `POST /orders` com dados sintéticos.
-3. **Arquivos locais**: armazene CSV/Parquet em `data/` (não versionado) e documente a origem.
+## Princípios
 
-## Fluxo sugerido para notebooks
-1. **Coleta & limpeza** – normalize colunas (`productId`, `quantity`, `status`, `timestamp`).
-2. **Feature engineering** – crie embeddings de descrições de produtos usando modelos como `text-embedding-3-large` (ou equivalentes self-hosted).
-3. **Modelagem** – explore duas frentes:
-   - *Forecasting/Anomalias*: modelos clássicos + prompts que consultam o histórico para justificar alertas.
-   - *Copiloto operacional*: LLM gera comandos `curl` ou consultas `kubectl` para operadores, usando contexto do runbook.
-4. **Avaliação** – capture métricas (MAE, precisão) e inclua checklist qualitativo dos prompts.
-5. **Produtização** – proponha rotas claras para mover o experimento para um serviço dedicado (por exemplo, `ai-advisor-service`).
+1. experimento deve ser reproduzível por script sempre que possível;
+2. dados sensíveis não entram no repositório;
+3. métricas devem acompanhar o artefato/modelo;
+4. experimento não é promovido a feature apenas porque funciona em notebook;
+5. integração ao sistema exige contrato, testes, observabilidade e justificativa arquitetural.
 
-## Integração com o monorepo
-- Armazene dependências em `ml/llm/requirements.txt` e utilize `pip install -r` dentro de um ambiente virtual.
-- Versione apenas notebooks limpos (`jupyter nbconvert --ClearOutputPreprocessor.enabled=True`).
-- Cada experimento deve conter scripts `train.py`/`infer.py` reproduzíveis e documentar o processo em seu README.
-- Referencie resultados relevantes em [`CHANGELOG.md`](../CHANGELOG.md) quando um experimento virar feature.
+## Demand forecasting
 
-## Boas práticas de prompt engineering
-- Documente cada prompt como código em células separadas.
-- Inclua testes unitários para helpers críticos (por exemplo, validação de esquema de resposta JSON).
-- Registre riscos de segurança (PII, vazamento de chaves) em cada notebook.
+O baseline atual usa regressão linear com features temporais e de cesta. A avaliação inclui MAE e R² em partição de teste.
 
-## Próximos experimentos
-- **Previsão de demanda**: treinar modelo híbrido (estatístico + LLM) para sugerir estoques – baseline disponível em `ml/experiments/demand-forecasting`.
-- **Detecção de fraude**: usar embeddings de histórico para detectar padrões anômalos antes da confirmação – baseada em `ml/experiments/order-anomaly-detection`.
-- **Geração de playbooks**: sintetizar runbooks específicos por incidente, alimentados pelo conteúdo de [`docs/runbook.md`](./runbook.md).
+Evoluções possíveis:
+
+- validação temporal em vez de split aleatório;
+- comparação com baselines sazonais;
+- tracking de experimentos;
+- integração somente se houver decisão explícita na Onda 4.
+
+## Order anomaly detection
+
+O baseline atual usa Isolation Forest sobre atributos tabulares de pedidos.
+
+A implementação deve continuar tratada como experimental: a avaliação atual ainda pode ser fortalecida com conjunto de validação independente, análise de recall/precision e limiar operacional.
+
+## LLM
+
+LLM permanece uma possibilidade futura, não uma obrigação arquitetural.
+
+Um caso de uso só deve ser implementado quando responder claramente:
+
+- qual decisão ou tarefa ele melhora;
+- por que um modelo tradicional/regra não basta;
+- quais dados/contexto são usados;
+- como a saída será avaliada;
+- como custo, latência, fallback e segurança serão tratados.
+
+Até lá, não há `AI Advisor` ou copiloto no roadmap imediato.
+
+## Relação com a evolução principal
+
+A confiabilidade distribuída do fluxo de pedidos tem prioridade sobre IA. Depois das Ondas 1–3, a Onda 4 pode escolher entre cloud/IaC real ou integração de um experimento de ML, conforme [`../ROADMAP.md`](../ROADMAP.md).
