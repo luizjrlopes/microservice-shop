@@ -35,7 +35,10 @@ services:
       DB_URL: jdbc:postgresql://postgres:5432/microservice_shop
       DB_USER: microservice_shop
       DB_PASSWORD: microservice_shop
-      RABBIT_URL: amqp://microservice_shop:microservice_shop@rabbitmq:5672
+      RABBIT_HOST: rabbitmq
+      RABBIT_PORT: "5672"
+      RABBIT_USER: microservice_shop
+      RABBIT_PASSWORD: microservice_shop
     ports:
       - "8080:8080"
     depends_on:
