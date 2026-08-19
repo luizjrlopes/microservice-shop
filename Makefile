@@ -67,7 +67,7 @@ worker-run:
 	python $(SCHEDULER_DIR)/app.py
 
 worker-lint:
-	black --check $(SCHEDULER_DIR)
+	black --check --diff $(SCHEDULER_DIR)
 	ruff check $(SCHEDULER_DIR)
 
 worker-test:
