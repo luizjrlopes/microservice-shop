@@ -14,9 +14,7 @@ REQUEST_TIMEOUT_SECONDS = float(os.environ.get("REQUEST_TIMEOUT_SECONDS", "5"))
 EXCHANGE_NAME = os.environ.get("ORDERS_EXCHANGE", "orders.events")
 ROUTING_KEY = os.environ.get("ORDER_CREATED_ROUTING_KEY", "order.created.v1")
 QUEUE_NAME = os.environ.get("SCHEDULER_QUEUE", "scheduler.order-created.v1")
-RETRY_QUEUE_NAME = os.environ.get(
-    "SCHEDULER_RETRY_QUEUE", "scheduler.order-created.retry.v1"
-)
+RETRY_QUEUE_NAME = os.environ.get("SCHEDULER_RETRY_QUEUE", "scheduler.order-created.retry.v1")
 DLQ_NAME = os.environ.get("SCHEDULER_DLQ", "scheduler.order-created.dlq.v1")
 RETRY_DELAY_MS = int(os.environ.get("SCHEDULER_RETRY_DELAY_MS", "5000"))
 MAX_RETRIES = int(os.environ.get("SCHEDULER_MAX_RETRIES", "3"))
@@ -92,9 +90,7 @@ def _event_context(data: dict[str, Any], properties) -> tuple[str, str, str]:
         order_id = payload.get("orderId")
 
     event_id = data.get("eventId") or getattr(properties, "message_id", None)
-    correlation_id = data.get("correlationId") or getattr(
-        properties, "correlation_id", None
-    )
+    correlation_id = data.get("correlationId") or getattr(properties, "correlation_id", None)
 
     if data.get("eventType") != "order.created":
         raise ValueError("unsupported eventType")
