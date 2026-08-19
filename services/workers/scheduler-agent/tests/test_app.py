@@ -27,6 +27,37 @@ def test_on_message_posts_confirmation_request_with_timeout(monkeypatch):
     channel.basic_ack.assert_called_once_with(delivery_tag="delivery")
 
 
+def test_on_message_accepts_versioned_order_created_envelope(monkeypatch):
+    channel = MagicMock()
+    method = _method("v1")
+    order_id = "8cdbdf86-5129-43cf-ac37-6203dbedbd80"
+    body = json.dumps(
+        {
+            "eventId": "6a5b755e-cd63-45a6-8930-c0280069bc89",
+            "eventType": "order.created",
+            "eventVersion": 1,
+            "correlationId": order_id,
+            "payload": {
+                "orderId": order_id,
+                "productId": "SKU-1",
+                "quantity": 2,
+                "status": "PENDING",
+            },
+        }
+    ).encode()
+
+    post_mock = MagicMock()
+    monkeypatch.setattr("app.requests.post", post_mock)
+
+    app.on_message(channel, method, None, body)
+
+    post_mock.assert_called_once_with(
+        f"{app.ORDER_URL}/orders/{order_id}/confirm",
+        timeout=app.REQUEST_TIMEOUT_SECONDS,
+    )
+    channel.basic_ack.assert_called_once_with(delivery_tag="v1")
+
+
 def test_on_message_acknowledges_when_order_id_is_missing(monkeypatch):
     channel = MagicMock()
     method = _method("tag")
