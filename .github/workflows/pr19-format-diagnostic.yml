@@ -1,0 +1,31 @@
+name: PR19 format diagnostic
+
+on:
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  java-format-diff:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+          cache: maven
+      - name: Apply Spotless without committing
+        run: mvn -f services/api/order-service/pom.xml spotless:apply
+      - name: Save formatter diff
+        run: |
+          git diff -- services/api/order-service/src > spotless.diff
+          cat spotless.diff
+      - name: Upload formatter diff
+        uses: actions/upload-artifact@v4
+        with:
+          name: pr19-spotless-diff
+          path: spotless.diff
+          retention-days: 1
