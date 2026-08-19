@@ -1,0 +1,39 @@
+name: Refresh BDD lockfile
+
+on:
+  push:
+    branches:
+      - agent/microservice-shop-hardening
+    paths:
+      - '.github/workflows/refresh-bdd-lock.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/microservice-shop-hardening
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Refresh package-lock.json
+        working-directory: tests/bdd
+        run: npm install --package-lock-only
+      - name: Verify patched dependency tree
+        working-directory: tests/bdd
+        run: npm audit --audit-level=high
+      - name: Commit lockfile
+        run: |
+          if [ -z "$(git status --porcelain -- tests/bdd/package-lock.json)" ]; then
+            echo "package-lock.json is already up to date."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add tests/bdd/package-lock.json
+          git commit -m "build: refresh BDD dependency lockfile"
+          git push origin HEAD:agent/microservice-shop-hardening
