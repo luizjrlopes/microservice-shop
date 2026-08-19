@@ -1,0 +1,33 @@
+asyncapi: 3.0.0
+info:
+  title: Microservice Shop Events
+  version: 1.0.0
+  description: >-
+    Contract baseline for Microservice Shop domain events. This document defines
+    the target order.created.v1 contract before runtime adoption.
+channels:
+  orderCreatedV1:
+    address: orders.events
+    messages:
+      orderCreatedV1:
+        $ref: '#/components/messages/OrderCreatedV1'
+operations:
+  publishOrderCreatedV1:
+    action: send
+    channel:
+      $ref: '#/channels/orderCreatedV1'
+    messages:
+      - $ref: '#/channels/orderCreatedV1/messages/orderCreatedV1'
+components:
+  messages:
+    OrderCreatedV1:
+      name: order.created.v1
+      title: Order created event v1
+      summary: Emitted after an order and its outbox record are committed.
+      contentType: application/json
+      payload:
+        $ref: './events/order-created-v1.schema.json'
+      bindings:
+        amqp:
+          routingKey: order.created.v1
+          bindingVersion: 0.3.0
