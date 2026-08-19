@@ -14,12 +14,12 @@ import org.springframework.context.annotation.Configuration;
 public class MessagingConfig {
   @Bean
   public TopicExchange orderExchange() {
-    return new TopicExchange("order.exchange");
+    return new TopicExchange("order.exchange", true, false);
   }
 
   @Bean
   public Queue orderCreatedQueue() {
-    return new Queue("order.created");
+    return new Queue("order.created", true);
   }
 
   @Bean
