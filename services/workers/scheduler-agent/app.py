@@ -14,6 +14,9 @@ def on_message(channel, method, properties, body):
     try:
         data = json.loads(body)
         order_id = data.get("id")
+        payload = data.get("payload")
+        if not order_id and isinstance(payload, dict):
+            order_id = payload.get("orderId")
         if not order_id:
             return
         requests.post(
