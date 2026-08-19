@@ -1,84 +1,270 @@
 # Microservice Shop
 
-Microservice Shop é uma plataforma de pedidos pensada para demonstrar padrões de mensageria e automação com serviços independentes. O monorepo inclui um serviço Java para gerenciamento de pedidos, um worker Python que confirma pedidos de forma assíncrona, além de testes BDD em TypeScript. A stack padrão utiliza Docker Compose para expor HTTP, AMQP e ferramentas de observabilidade prontas para laboratório.
+**Microservice Shop** é uma plataforma de processamento de pedidos orientada a eventos, construída para explorar decisões reais de sistemas distribuídos: fronteiras entre serviços, mensageria assíncrona, entrega *at-least-once*, idempotência, retry com atraso, Dead Letter Queue, contratos de eventos e testes ponta a ponta.
 
-## Visão geral
-- **Orquestração**: `docker-compose.yml` provisiona RabbitMQ, `order-service` (Spring Boot) e `scheduler-agent` (Python).
-- **Fluxo de pedidos**: clientes criam pedidos via `POST /orders`. O serviço publica um evento `order.created` no RabbitMQ, consumido pelo scheduler para confirmar o pedido.
-- **Testes end-to-end**: `tests/bdd` contém cenários Cucumber simulando a criação de pedidos e verificando mensagens.
+O projeto usa uma stack poliglota de forma intencional. O `order-service`, em Java/Spring Boot, mantém o domínio e a API de pedidos. O `scheduler-agent`, em Python, reage aos eventos publicados no RabbitMQ e executa a confirmação assíncrona sem acessar diretamente o estado interno do serviço.
 
-## Destaques de IA/LLM
-Mesmo que os serviços de produção sejam tradicionais, o repositório mantém trilhas de experimentação com IA e LLMs:
-- **Notebooks de experimentos** documentados em [`docs/experiments-notebooks.md`](docs/experiments-notebooks.md) descrevem como usar embeddings e LLMs para analisar dados de pedidos e gerar respostas automatizadas.
-- **Roadmap** inclui iniciativas de copiloto operacional e de previsão baseada em modelos generativos para o pipeline de pedidos. Veja [`ROADMAP.md`](ROADMAP.md).
-- **Guides de integração** recomendam como transformar os experimentos em features observáveis, preservando limites claros entre microsserviços e camadas de IA.
+## O que o projeto demonstra
 
-## Como usar
-### Pré-requisitos
-- Docker e Docker Compose (v2+).
-- Acesso a portas `8080`, `5672` e `15672`.
-- Opcional para desenvolvimento local sem containers: Java 17, Maven 3.9+, Python 3.11 e Node 18.
+- arquitetura orientada a eventos com RabbitMQ;
+- separação de responsabilidades entre API e worker;
+- Clean Architecture no serviço de pedidos;
+- processamento assíncrono com semântica *at-least-once*;
+- confirmação idempotente de pedidos;
+- retry configurável com fila intermediária e atraso;
+- Dead Letter Queue para falhas não recuperáveis ou retries esgotados;
+- eventos persistentes com `eventId`, timestamp e correlation ID;
+- validação de entrada na fronteira HTTP;
+- logs estruturados no consumidor com duração, tentativa e motivo de falha;
+- testes unitários em Java e Python;
+- cenários BDD em TypeScript cobrindo HTTP + AMQP + processamento assíncrono;
+- pipeline de CI com lint, testes, segurança e validação end-to-end via Docker Compose.
 
-### Subindo toda a stack
-```bash
-docker compose up -d
+## Arquitetura
+
+```text
+                         POST /orders
+                              │
+                              ▼
+                  ┌──────────────────────┐
+                  │    order-service     │
+                  │ Java + Spring Boot   │
+                  │                      │
+                  │ domain / use cases   │
+                  │ repository adapter   │
+                  └──────────┬───────────┘
+                             │
+                      order.created
+                             │
+                             ▼
+                  ┌──────────────────────┐
+                  │      RabbitMQ        │
+                  │    order.exchange    │
+                  └──────────┬───────────┘
+                             │
+                             ▼
+                  ┌──────────────────────┐
+                  │   scheduler-agent    │
+                  │       Python         │
+                  └──────────┬───────────┘
+                             │
+                   POST /orders/{id}/confirm
+                             │
+                             ▼
+                      order-service
 ```
-1. Aguarde o healthcheck de RabbitMQ (`http://localhost:15672`).
-2. Verifique o serviço de pedidos: `curl http://localhost:8080/actuator/health`.
-3. Monitore os logs do scheduler: `docker compose logs -f scheduler-agent`.
 
-### Criando e confirmando pedidos
+### Caminho de recuperação
+
+```text
+order.created
+     │
+     ▼
+scheduler-agent
+     │
+     ├── sucesso ───────────────────────────────► ACK
+     │
+     ├── falha transitória
+     │       │
+     │       ▼
+     │  order.retry.exchange
+     │       │
+     │       ▼
+     │  order.created.retry
+     │       │ TTL
+     │       └──────────────────────────────────► order.created
+     │
+     └── retries esgotados / erro não recuperável
+             │
+             ▼
+          order.dlx
+             │
+             ▼
+       order.created.dlq
+```
+
+O consumidor só confirma a mensagem após uma resposta HTTP bem-sucedida. Falhas transitórias percorrem o ciclo de retry e mensagens que excedem o orçamento de tentativas são preservadas na DLQ para inspeção.
+
+## Contrato do evento
+
+`order.created` carrega os dados mínimos necessários para rastreabilidade e processamento:
+
+```json
+{
+  "eventId": "d45457bf-6efa-4b0b-98ee-2e20d0e5f6aa",
+  "occurredAt": "2026-08-19T00:00:00Z",
+  "id": "order-id",
+  "productId": "p1",
+  "quantity": 2,
+  "status": "PENDING"
+}
+```
+
+A mensagem também recebe `messageId`, `correlationId` e headers de evento no RabbitMQ. O `correlationId` permite relacionar a criação do pedido ao processamento assíncrono nos logs.
+
+## Semântica de entrega
+
+O fluxo foi desenhado para tolerar reentrega:
+
+1. o `order-service` cria o pedido e publica `order.created`;
+2. o `scheduler-agent` recebe a mensagem;
+3. a confirmação é feita exclusivamente pela API do `order-service`;
+4. a operação de confirmação é idempotente;
+5. o worker faz `ACK` somente após sucesso;
+6. falhas transitórias entram em retry com atraso;
+7. erros não recuperáveis ou tentativas esgotadas seguem para DLQ.
+
+Esse desenho evita o erro clássico de considerar “mensagem recebida” equivalente a “trabalho concluído”.
+
+## Stack
+
+| Área | Tecnologia |
+|---|---|
+| Order API | Java 17, Spring Boot, Spring AMQP, Actuator |
+| Worker | Python 3.11, Pika, Requests |
+| Broker | RabbitMQ |
+| Testes Java | JUnit 5, Mockito, MockMvc |
+| Testes Python | Pytest |
+| Testes E2E | TypeScript, Cucumber, Axios, amqplib |
+| Orquestração local | Docker Compose |
+| Qualidade | Spotless, Black, Ruff |
+| Segurança | Bandit, npm audit |
+| CI | GitHub Actions |
+
+## Executar localmente
+
+### Pré-requisitos
+
+- Docker
+- Docker Compose v2
+
+### Subir a stack
+
 ```bash
-# Cria um pedido
+docker compose up -d --build
+```
+
+Serviços disponíveis:
+
+- API: `http://localhost:8080`
+- Health: `http://localhost:8080/actuator/health`
+- RabbitMQ Management: `http://localhost:15672`
+
+Credenciais locais do RabbitMQ: `guest` / `guest`.
+
+### Criar um pedido
+
+```bash
 curl -X POST http://localhost:8080/orders \
   -H "Content-Type: application/json" \
-  -d '{"productId":"SKU-1","quantity":2}'
-
-# Após o evento ser consumido, o scheduler chama automaticamente
-# POST /orders/{id}/confirm. Use os logs do order-service
-# para verificar a transição de status.
+  -d '{"productId":"p1","quantity":2}'
 ```
 
-### Executando testes
-- `make api-test` roda `mvn test` em `services/api/order-service` (ainda sem casos, configure ao evoluir).
-- `make bdd-test` instala dependências e executa `npm test` em `tests/bdd` (exige stack rodando).
-- Consulte [`docs/runbook.md`](docs/runbook.md) para tarefas adicionais com o `Makefile`.
+A resposta contém o ID criado. O pedido inicia em `PENDING`, publica `order.created` e é confirmado de forma assíncrona pelo scheduler.
 
-## Documentação
-- [`docs/setup.md`](docs/setup.md): dependências, variáveis e procedimentos de instalação.
-- [`docs/runbook.md`](docs/runbook.md): runbooks, troubleshooting e validações.
-- [`docs/architecture.md`](docs/architecture.md): visão sistêmica, diagramas e contratos.
-- [`docs/experiments-notebooks.md`](docs/experiments-notebooks.md): governança dos experimentos de IA/LLM.
-- [`docs/restructure-plan.md`](docs/restructure-plan.md): inventário histórico do repositório.
-- [`docs/entregas-estagio.md`](docs/entregas-estagio.md): destaque das entregas do estágio, seus impactos e relação com requisitos de LLMs, MLOps e documentação.
-- [`docs/proximos-passos.md`](docs/proximos-passos.md): guia consolidado do que falta para considerar o projeto pronto para demos ou piloto.
+### Consultar o estado
 
-## Estrutura do repositório
+```bash
+curl http://localhost:8080/orders/<ORDER_ID>
 ```
+
+Após o processamento assíncrono, o estado esperado é `CONFIRMED`.
+
+## Resiliência configurável
+
+O `scheduler-agent` aceita:
+
+| Variável | Default | Função |
+|---|---:|---|
+| `REQUEST_TIMEOUT_SECONDS` | `5` | timeout da chamada de confirmação |
+| `MAX_RETRIES` | `3` | quantidade máxima de retries |
+| `RETRY_DELAY_MS` | `5000` | atraso da fila de retry |
+| `LOG_LEVEL` | `INFO` | nível dos logs estruturados |
+
+## Testes e qualidade
+
+### Unitários
+
+```bash
+make test
+```
+
+Executa os testes do `order-service` e do `scheduler-agent`.
+
+### Linters
+
+```bash
+make lint
+```
+
+### Segurança
+
+```bash
+make security
+```
+
+### BDD ponta a ponta
+
+Com a stack em execução:
+
+```bash
+make bdd-install
+make bdd-test
+```
+
+Os cenários BDD observam o evento por uma fila exclusiva de auditoria, sem competir com a fila consumida pelo scheduler, e verificam também a confirmação assíncrona do pedido.
+
+## CI
+
+O GitHub Actions possui quatro gates:
+
+1. **quality** — Spotless, Black, Ruff e TypeScript;
+2. **unit-tests** — testes Java e Python;
+3. **security** — Bandit e auditoria das dependências npm;
+4. **integration-bdd** — build completo da stack em containers e cenários Cucumber reais contra HTTP + RabbitMQ.
+
+Uma mudança só conclui a pipeline depois de atravessar o fluxo distribuído de ponta a ponta.
+
+## Estrutura
+
+```text
 microservice-shop/
-├── docker-compose.yml          # Orquestra RabbitMQ + serviços
 ├── services/
-│   ├── api/order-service/      # API Java 17 + Spring Boot
-│   └── workers/scheduler-agent/ # Worker Python que consome RabbitMQ
-├── ml/llm/                     # Notebooks e libs de experimentação IA/LLM
-├── infra/terraform/            # Ponto de partida para provisionamento IaC
+│   ├── api/
+│   │   └── order-service/          # domínio e API Spring Boot
+│   └── workers/
+│       └── scheduler-agent/        # consumidor RabbitMQ em Python
 ├── tests/
-│   └── bdd/                    # Cenários Cucumber em TypeScript
-└── docs/                       # Guias, arquitetura e experimentos
+│   └── bdd/                        # cenários Cucumber
+├── docs/
+│   ├── 00-produto/
+│   ├── 01-regras/
+│   ├── 02-arquitetura/
+│   ├── 03-ia-context/
+│   └── 04-operacao/
+├── ml/                             # trilha experimental de ML/LLM
+├── infra/                          # evolução de infraestrutura como código
+├── docker-compose.yml
+└── Makefile
 ```
 
-### Scripts padronizados
-Um `Makefile` centraliza as rotinas mais comuns:
+## Decisões e trade-offs
 
-| Comando | Descrição |
-| --- | --- |
-| `make compose-up` / `make compose-down` | Sobe/derruba a stack completa com Docker Compose. |
-| `make api-test` | Executa `mvn test` no `services/api/order-service`. |
-| `make worker-run` | Exporta variáveis (`RABBIT_URL`, `ORDER_URL`) e sobe o worker Python localmente. |
-| `make bdd-test` | Instala dependências e executa os testes BDD. |
-| `make llm-setup` | Instala as dependências listadas em `ml/llm/requirements.txt`. |
+O repositório mantém ADRs e documentação arquitetural em `docs/02-arquitetura`.
 
-Use `make help` para visualizar todas as metas disponíveis e parâmetros adicionais.
+A persistência do pedido ainda usa um adapter em memória. Isso mantém o núcleo do exemplo pequeno e facilita os testes, mas não é tratado como uma solução de produção. A evolução natural é introduzir PostgreSQL atrás da interface `OrderRepository`, preservando os casos de uso e o contrato do domínio.
 
-## Próximos passos
-Consulte [`ROADMAP.md`](ROADMAP.md), [`CHANGELOG.md`](CHANGELOG.md) e o guia de [próximos passos](docs/proximos-passos.md) para entender prioridades, evolução e o que falta para finalizar o projeto. Contribuições são bem-vindas via PR seguindo as orientações do arquivo `AGENTS.md` na raiz.
+A trilha `ml/` permanece experimental e desacoplada do caminho crítico. O objetivo é evitar que IA seja adicionada apenas como ornamento: qualquer promoção para o fluxo principal deve ter contrato, observabilidade e critério de falha explícitos.
+
+## Próximas evoluções
+
+As próximas melhorias de maior retorno arquitetural são:
+
+- adapter PostgreSQL + migrações;
+- tracing distribuído com OpenTelemetry;
+- métricas Prometheus para API, filas e worker;
+- testes de integração com Testcontainers;
+- provisionamento de infraestrutura em ambiente cloud;
+- somente depois disso, novos bounded contexts como catálogo ou autenticação.
+
+Consulte `docs/02-arquitetura` para decisões técnicas e `ROADMAP.md` para a sequência de evolução.
