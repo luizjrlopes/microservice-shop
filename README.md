@@ -1,84 +1,138 @@
 # Microservice Shop
 
-Microservice Shop é uma plataforma de pedidos pensada para demonstrar padrões de mensageria e automação com serviços independentes. O monorepo inclui um serviço Java para gerenciamento de pedidos, um worker Python que confirma pedidos de forma assíncrona, além de testes BDD em TypeScript. A stack padrão utiliza Docker Compose para expor HTTP, AMQP e ferramentas de observabilidade prontas para laboratório.
+**Microservice Shop** é uma plataforma de processamento de pedidos orientada a eventos, construída para explorar problemas reais de sistemas distribuídos em uma stack poliglota Java/Python.
 
-## Visão geral
-- **Orquestração**: `docker-compose.yml` provisiona RabbitMQ, `order-service` (Spring Boot) e `scheduler-agent` (Python).
-- **Fluxo de pedidos**: clientes criam pedidos via `POST /orders`. O serviço publica um evento `order.created` no RabbitMQ, consumido pelo scheduler para confirmar o pedido.
-- **Testes end-to-end**: `tests/bdd` contém cenários Cucumber simulando a criação de pedidos e verificando mensagens.
+O fluxo principal combina uma API Spring Boot, RabbitMQ e um worker Python para processar pedidos de forma assíncrona. A evolução arquitetural do projeto está concentrada em confiabilidade: consistência entre estado e evento, processamento idempotente, recuperação de falhas, contratos versionados e observabilidade.
 
-## Destaques de IA/LLM
-Mesmo que os serviços de produção sejam tradicionais, o repositório mantém trilhas de experimentação com IA e LLMs:
-- **Notebooks de experimentos** documentados em [`docs/experiments-notebooks.md`](docs/experiments-notebooks.md) descrevem como usar embeddings e LLMs para analisar dados de pedidos e gerar respostas automatizadas.
-- **Roadmap** inclui iniciativas de copiloto operacional e de previsão baseada em modelos generativos para o pipeline de pedidos. Veja [`ROADMAP.md`](ROADMAP.md).
-- **Guides de integração** recomendam como transformar os experimentos em features observáveis, preservando limites claros entre microsserviços e camadas de IA.
+## Estado atual
 
-## Como usar
-### Pré-requisitos
-- Docker e Docker Compose (v2+).
-- Acesso a portas `8080`, `5672` e `15672`.
-- Opcional para desenvolvimento local sem containers: Java 17, Maven 3.9+, Python 3.11 e Node 18.
+Hoje o repositório implementa:
 
-### Subindo toda a stack
-```bash
-docker compose up -d
+- `order-service` em Java 17 + Spring Boot;
+- criação e confirmação de pedidos via HTTP;
+- publicação do evento `order.created` em RabbitMQ;
+- `scheduler-agent` em Python consumindo eventos e acionando a confirmação;
+- Docker Compose para executar a stack local;
+- testes unitários em Java e Python;
+- suíte BDD em TypeScript/Cucumber;
+- ADRs e documentação arquitetural;
+- experimentos executáveis de ML clássico para previsão de demanda e detecção de anomalias.
+
+O repositório **ainda não possui** persistência PostgreSQL, Transactional Outbox, retry/DLQ completos, observabilidade distribuída ou uma feature LLM integrada. Esses itens aparecem apenas quando fazem parte do plano de evolução e não são apresentados como capacidades concluídas.
+
+## Arquitetura atual
+
+```mermaid
+flowchart LR
+    C[Client] -->|POST /orders| API[order-service\nJava + Spring Boot]
+    API -->|save| MEM[(In-memory repository)]
+    API -->|order.created| MQ{{RabbitMQ}}
+    MQ --> W[scheduler-agent\nPython]
+    W -->|POST /orders/{id}/confirm| API
 ```
-1. Aguarde o healthcheck de RabbitMQ (`http://localhost:15672`).
-2. Verifique o serviço de pedidos: `curl http://localhost:8080/actuator/health`.
-3. Monitore os logs do scheduler: `docker compose logs -f scheduler-agent`.
 
-### Criando e confirmando pedidos
+### Stack
+
+| Área | Tecnologia |
+|---|---|
+| API | Java 17, Spring Boot, Spring AMQP |
+| Worker | Python 3.11, pika, requests |
+| Mensageria | RabbitMQ |
+| Testes E2E | TypeScript, Cucumber, Axios, amqplib |
+| Execução local | Docker Compose |
+| ML experimental | Python, pandas, scikit-learn |
+| Automação | Makefile, GitHub Actions |
+
+## Por que este projeto existe
+
+O projeto não tenta maximizar a quantidade de serviços. O objetivo é aprofundar um fluxo distribuído pequeno o suficiente para ser compreendido por inteiro e complexo o suficiente para discutir propriedades que importam em produção:
+
+- o que acontece quando uma chamada HTTP falha depois de uma mensagem ser entregue;
+- como evitar perda silenciosa de eventos;
+- como lidar com reentrega e efeitos duplicados;
+- como garantir consistência entre persistência e publicação;
+- como observar um pedido atravessando processos diferentes;
+- como provar essas propriedades com testes automatizados.
+
+## Evolução arquitetural
+
+O alvo aprovado para a próxima versão é:
+
+```text
+Client
+  -> order-service
+      -> PostgreSQL
+      -> Transactional Outbox
+          -> RabbitMQ
+              -> scheduler-agent
+                  -> retry / DLQ
+                  -> confirmação idempotente
+```
+
+A estratégia completa, incluindo matriz de gaps, arquitetura-alvo, ondas de implementação e Definition of Done, está em [`docs/05-evolucao/PLANO_EVOLUCAO_ARQUITETURAL.md`](docs/05-evolucao/PLANO_EVOLUCAO_ARQUITETURAL.md).
+
+A auditoria factual que motivou esse plano está em [`docs/05-evolucao/AUDITORIA_ESTADO_ATUAL.md`](docs/05-evolucao/AUDITORIA_ESTADO_ATUAL.md).
+
+## Executando localmente
+
+### Pré-requisitos
+
+- Docker;
+- Docker Compose v2+.
+
+### Subir a stack
+
 ```bash
-# Cria um pedido
+docker compose up -d --build
+```
+
+Serviços principais:
+
+- API: `http://localhost:8080`;
+- health: `http://localhost:8080/actuator/health`;
+- RabbitMQ Management: `http://localhost:15672`.
+
+### Criar um pedido
+
+```bash
 curl -X POST http://localhost:8080/orders \
   -H "Content-Type: application/json" \
   -d '{"productId":"SKU-1","quantity":2}'
-
-# Após o evento ser consumido, o scheduler chama automaticamente
-# POST /orders/{id}/confirm. Use os logs do order-service
-# para verificar a transição de status.
 ```
 
-### Executando testes
-- `make api-test` roda `mvn test` em `services/api/order-service` (ainda sem casos, configure ao evoluir).
-- `make bdd-test` instala dependências e executa `npm test` em `tests/bdd` (exige stack rodando).
-- Consulte [`docs/runbook.md`](docs/runbook.md) para tarefas adicionais com o `Makefile`.
+O pedido é criado como `PENDING`, um evento é publicado no RabbitMQ e o worker tenta confirmar o pedido de forma assíncrona.
+
+## Qualidade e testes
+
+O `Makefile` centraliza as rotinas principais:
+
+```bash
+make lint
+make test
+make security
+make bdd-test
+```
+
+Os testes Java e Python já existem no estado atual. A suíte BDD também existe, mas sua execução como gate distribuído completo faz parte da evolução planejada porque o desenho atual ainda possui competição pela fila do consumidor.
+
+## ML e IA
+
+O repositório possui duas trilhas de ML clássico executáveis:
+
+- `ml/experiments/demand-forecasting`;
+- `ml/experiments/order-anomaly-detection`.
+
+A área `ml/llm` é experimental e ainda não representa uma feature LLM integrada ao produto. A decisão atual é não adicionar um `AI Advisor` ou outro microsserviço de IA antes de existir um caso de uso implementado e justificável.
 
 ## Documentação
-- [`docs/setup.md`](docs/setup.md): dependências, variáveis e procedimentos de instalação.
-- [`docs/runbook.md`](docs/runbook.md): runbooks, troubleshooting e validações.
-- [`docs/architecture.md`](docs/architecture.md): visão sistêmica, diagramas e contratos.
-- [`docs/experiments-notebooks.md`](docs/experiments-notebooks.md): governança dos experimentos de IA/LLM.
-- [`docs/restructure-plan.md`](docs/restructure-plan.md): inventário histórico do repositório.
-- [`docs/entregas-estagio.md`](docs/entregas-estagio.md): destaque das entregas do estágio, seus impactos e relação com requisitos de LLMs, MLOps e documentação.
-- [`docs/proximos-passos.md`](docs/proximos-passos.md): guia consolidado do que falta para considerar o projeto pronto para demos ou piloto.
 
-## Estrutura do repositório
-```
-microservice-shop/
-├── docker-compose.yml          # Orquestra RabbitMQ + serviços
-├── services/
-│   ├── api/order-service/      # API Java 17 + Spring Boot
-│   └── workers/scheduler-agent/ # Worker Python que consome RabbitMQ
-├── ml/llm/                     # Notebooks e libs de experimentação IA/LLM
-├── infra/terraform/            # Ponto de partida para provisionamento IaC
-├── tests/
-│   └── bdd/                    # Cenários Cucumber em TypeScript
-└── docs/                       # Guias, arquitetura e experimentos
-```
+As fontes principais são:
 
-### Scripts padronizados
-Um `Makefile` centraliza as rotinas mais comuns:
+- [`docs/00-produto/`](docs/00-produto/) — visão e escopo;
+- [`docs/02-arquitetura/visao-tecnica.md`](docs/02-arquitetura/visao-tecnica.md) — arquitetura atualmente implementada;
+- [`docs/02-arquitetura/decisoes/`](docs/02-arquitetura/decisoes/) — ADRs;
+- [`docs/04-operacao/`](docs/04-operacao/) — operação;
+- [`docs/05-evolucao/`](docs/05-evolucao/) — auditoria e plano arquitetural vigente;
+- [`ROADMAP.md`](ROADMAP.md) — sequência de evolução.
 
-| Comando | Descrição |
-| --- | --- |
-| `make compose-up` / `make compose-down` | Sobe/derruba a stack completa com Docker Compose. |
-| `make api-test` | Executa `mvn test` no `services/api/order-service`. |
-| `make worker-run` | Exporta variáveis (`RABBIT_URL`, `ORDER_URL`) e sobe o worker Python localmente. |
-| `make bdd-test` | Instala dependências e executa os testes BDD. |
-| `make llm-setup` | Instala as dependências listadas em `ml/llm/requirements.txt`. |
-
-Use `make help` para visualizar todas as metas disponíveis e parâmetros adicionais.
-
-## Próximos passos
-Consulte [`ROADMAP.md`](ROADMAP.md), [`CHANGELOG.md`](CHANGELOG.md) e o guia de [próximos passos](docs/proximos-passos.md) para entender prioridades, evolução e o que falta para finalizar o projeto. Contribuições são bem-vindas via PR seguindo as orientações do arquivo `AGENTS.md` na raiz.
+Documentos históricos continuam no repositório quando úteis para rastreabilidade, mas não devem ser tratados como fonte canônica do estado atual.

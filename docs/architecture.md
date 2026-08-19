@@ -1,44 +1,92 @@
-# Arquitetura
+# Arquitetura Atual — Microservice Shop
 
-Este documento descreve a arquitetura atual do Microservice Shop, cobrindo microsserviços, mensagens e contratos expostos.
+> Este documento descreve **somente o que está implementado hoje**. A arquitetura-alvo está em [`05-evolucao/PLANO_EVOLUCAO_ARQUITETURAL.md`](05-evolucao/PLANO_EVOLUCAO_ARQUITETURAL.md).
 
 ## Visão em alto nível
+
 ```mermaid
 flowchart LR
     Client((Cliente REST)) -->|POST /orders| OrderService
-    OrderService[order-service \n Spring Boot] -->|evento order.created| RabbitMQ[(RabbitMQ)]
-    RabbitMQ --> Scheduler[scheduler-agent \n Python Worker]
+    OrderService[order-service\nSpring Boot] -->|save| Repo[(InMemoryOrderRepository)]
+    OrderService -->|order.created| RabbitMQ[(RabbitMQ)]
+    RabbitMQ --> Scheduler[scheduler-agent\nPython]
     Scheduler -->|POST /orders/{id}/confirm| OrderService
 ```
 
-- **order-service** (`services/api/order-service`): API HTTP que cria pedidos, persiste em memória e publica eventos.
-- **RabbitMQ**: transporte AMQP usando exchange `order.exchange`, routing key `order.created` e fila homônima.
-- **scheduler-agent** (`services/workers/scheduler-agent`): worker que consome `order.created` e confirma pedidos.
+## Componentes
 
-## Componentes detalhados
-| Componente | Linguagem | Entradas | Saídas | Responsabilidade |
-| --- | --- | --- | --- | --- |
-| order-service (`services/api/order-service`) | Java 17 (Spring Boot) | HTTP (`POST /orders`, `POST /orders/{id}/confirm`), eventos `order.created`. | HTTP 201/200, eventos `order.created`. | Orquestra ciclo de vida do pedido e dispara mensagens para automação downstream. |
-| scheduler-agent (`services/workers/scheduler-agent`) | Python 3.11 | Fila `order.created` | HTTP `POST /orders/{id}/confirm` | Automatiza a confirmação assíncrona usando o ID publicado no evento. |
-| tests/bdd | Node 18 + Cucumber | HTTP/API, AMQP | Relatórios de testes | Valida cenários ponta-a-ponta usando RabbitMQ real. |
+| Componente | Tecnologia | Responsabilidade atual |
+|---|---|---|
+| `order-service` | Java 17 + Spring Boot | cria e confirma pedidos; publica `order.created` |
+| `InMemoryOrderRepository` | Java | mantém pedidos durante a vida do processo |
+| RabbitMQ | AMQP | transporta eventos entre produtor e consumidor |
+| `scheduler-agent` | Python 3.11 + pika + requests | consome evento e chama a confirmação HTTP |
+| `tests/bdd` | TypeScript + Cucumber | exercita API e RabbitMQ |
 
-## Contratos principais
-### HTTP – order-service
-| Método/rota | Payload | Resposta |
-| --- | --- | --- |
-| `POST /orders` | `{ "productId": string, "quantity": number }` | `201 Created` com `{ "id": string }`. Publica evento `order.created`. |
-| `POST /orders/{id}/confirm` | nenhum | `200 OK`. Atualiza estado do pedido. |
+## Contratos HTTP atuais
 
-### Mensageria
-| Exchange | Routing Key | Payload | Consumidor |
-| --- | --- | --- | --- |
-| `order.exchange` | `order.created` | `{ id, productId, quantity, status }` | `scheduler-agent` (fila `order.created`). |
+| Método | Rota | Comportamento |
+|---|---|---|
+| `POST` | `/orders` | cria um pedido e retorna `201` com `{ "id": string }` |
+| `POST` | `/orders/{id}/confirm` | marca o pedido como `CONFIRMED` e retorna `200` |
 
-## Dependências externas
-- **RabbitMQ**: obrigatório. Configure via `RABBIT_URL`.
-- **Banco de dados**: atualmente `InMemoryOrderRepository`. Planeje integração com PostgreSQL ou Mongo (ver `ROADMAP.md`).
+O estado atual ainda não expõe `GET /orders/{id}`.
 
-## Extensões planejadas
-- Adicionar `catalog-service`, `auth-service` e serviços de pagamento para refletir a visão completa descrita em [`docs/restructure-plan.md`](./restructure-plan.md).
-- Instrumentar métricas (Micrometer) e tracing distribuído.
-- Conectar notebooks LLM (`ml/llm/notebooks`) para prever demanda e sugerir promoções automatizadas (detalhes em [`docs/experiments-notebooks.md`](./experiments-notebooks.md)).
+## Contrato AMQP atual
+
+| Item | Valor |
+|---|---|
+| Exchange | `order.exchange` |
+| Routing key | `order.created` |
+| Fila | `order.created` |
+| Payload | `{ id, productId, quantity, status }` |
+
+Essa topologia funciona para o fluxo mínimo, mas conflui conceito de evento e fila do consumidor. A evolução aprovada separa esses papéis e introduz versionamento explícito.
+
+## Persistência atual
+
+O `order-service` usa `InMemoryOrderRepository`, baseado em `ConcurrentHashMap`.
+
+Consequências:
+
+- reiniciar o processo remove os pedidos;
+- não há transação de banco;
+- não é possível garantir atomicidade entre persistência e publicação;
+- o desenho atual é adequado apenas ao estágio presente do projeto.
+
+## Fronteiras arquiteturais
+
+O código está organizado em `domain`, `application`, `infrastructure` e `interfaces`, inspirado em Clean Architecture. Entretanto, o contrato `OrderRepository` ainda reside em `infrastructure` e é importado pelos casos de uso.
+
+Por isso, a documentação **não afirma que a implementação atual segue Clean Architecture estrita**. A evolução prevista move ports de saída para uma camada adequada e mantém adapters em infraestrutura.
+
+## Limitações distribuídas conhecidas
+
+As limitações mais importantes hoje são:
+
+- ACK do worker não depende de sucesso real da operação HTTP;
+- chamada HTTP sem timeout explícito;
+- ausência de retry/DLQ completos;
+- dual write entre persistência do pedido e publicação no broker;
+- confirmação não modelada como operação idempotente explícita;
+- evento sem envelope/versionamento/correlação suficientes;
+- BDD competindo pela fila do worker;
+- CI sem gate E2E distribuído.
+
+Esses pontos não são bugs escondidos da documentação: estão registrados formalmente na [`05-evolucao/AUDITORIA_ESTADO_ATUAL.md`](05-evolucao/AUDITORIA_ESTADO_ATUAL.md).
+
+## Arquitetura-alvo
+
+A evolução aprovada introduz:
+
+- PostgreSQL;
+- Transactional Outbox;
+- evento `order.created.v1`;
+- fila exclusiva do `scheduler-agent`;
+- retry com atraso e DLQ;
+- idempotência;
+- contratos versionados;
+- E2E distribuído no CI;
+- observabilidade correlacionada.
+
+O detalhamento e a sequência estão em [`05-evolucao/PLANO_EVOLUCAO_ARQUITETURAL.md`](05-evolucao/PLANO_EVOLUCAO_ARQUITETURAL.md) e no [`../ROADMAP.md`](../ROADMAP.md).

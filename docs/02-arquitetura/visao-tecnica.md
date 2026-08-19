@@ -1,80 +1,126 @@
-# Visão Técnica — microservice-shop
+# Visão Técnica — Microservice Shop
 
-## Stack por serviço
+> **Escopo deste documento:** arquitetura atualmente implementada. A evolução futura está em [`../05-evolucao/PLANO_EVOLUCAO_ARQUITETURAL.md`](../05-evolucao/PLANO_EVOLUCAO_ARQUITETURAL.md).
 
-| Serviço | Linguagem | Framework | Comunicação |
-|---------|-----------|-----------|-------------|
-| order-service | Java 17 | Spring Boot 3 + Spring AMQP | HTTP (entrada) + AMQP (saída) |
-| scheduler-agent | Python 3.11 | pika (AMQP) + requests (HTTP) | AMQP (entrada) + HTTP (saída) |
-| tests/bdd | TypeScript | Cucumber + axios | HTTP + AMQP |
-| ml/experiments | Python | scikit-learn | — (notebooks/scripts standalone) |
-| ml/llm | Python | LangChain / OpenAI | — (notebooks standalone) |
+## Stack atual
 
-## Estrutura do repositório
+| Componente | Linguagem | Framework / libs | Comunicação |
+|---|---|---|---|
+| `order-service` | Java 17 | Spring Boot 3, Spring AMQP | HTTP + AMQP |
+| `scheduler-agent` | Python 3.11 | pika, requests | AMQP + HTTP |
+| `tests/bdd` | TypeScript | Cucumber, Axios, amqplib | HTTP + AMQP |
+| `ml/experiments` | Python | pandas, scikit-learn | scripts standalone |
+| RabbitMQ | — | RabbitMQ | AMQP |
 
-```
+A área `ml/llm` contém dependências e documentação experimental, mas não possui atualmente uma feature LLM integrada ao sistema.
+
+## Estrutura principal
+
+```text
 microservice-shop/
-├── docker-compose.yml
-├── Makefile
 ├── services/
-│   ├── api/order-service/          # Java Spring Boot
-│   │   ├── src/main/java/com/shop/order/
-│   │   │   ├── OrderApplication.java
-│   │   │   ├── application/         # Use cases
-│   │   │   ├── domain/              # Entidades
-│   │   │   ├── infrastructure/      # Repositório, AMQP, config
-│   │   │   └── interfaces/          # Controller HTTP
-│   │   └── pom.xml
-│   └── workers/scheduler-agent/     # Python worker
-│       └── app.py
-├── ml/
-│   ├── experiments/
-│   │   ├── demand-forecasting/      # Previsão de demanda
-│   │   └── order-anomaly-detection/ # Detecção de anomalias
-│   └── llm/                         # Experimentos LLM
-├── tests/
-│   └── bdd/                         # Cucumber TypeScript
-├── infra/terraform/                 # IaC (stub)
-└── docs/
+│   ├── api/order-service/
+│   │   └── src/main/java/com/shop/order/
+│   │       ├── domain/
+│   │       ├── application/
+│   │       ├── infrastructure/
+│   │       └── interfaces/
+│   └── workers/scheduler-agent/
+├── tests/bdd/
+├── ml/experiments/
+├── ml/llm/
+├── infra/terraform/
+├── docs/
+├── docker-compose.yml
+└── Makefile
 ```
 
-## Diagrama de arquitetura
+## Fluxo atual
 
-```
-[Cliente REST / BDD Tests]
-          │ HTTP POST /orders
-          ▼
-┌─────────────────────────┐
-│  order-service :8080    │
-│  (Java + Spring Boot)   │
-│  InMemoryOrderRepository│
-└────────────┬────────────┘
-             │ AMQP: order.exchange / order.created
-             ▼
-┌─────────────────────────┐
-│     RabbitMQ :5672      │
-│  (management :15672)    │
-└────────────┬────────────┘
-             │ consume: order.created
-             ▼
-┌─────────────────────────┐
-│  scheduler-agent :Python│
-│  → POST /orders/{id}/   │
-│       confirm           │
-└─────────────────────────┘
+```mermaid
+flowchart LR
+    Client[Cliente] -->|POST /orders| API[order-service]
+    API --> MEM[(InMemoryOrderRepository)]
+    API -->|order.created| EX{{order.exchange}}
+    EX --> Q[order.created]
+    Q --> W[scheduler-agent]
+    W -->|POST /orders/{id}/confirm| API
 ```
 
-## Padrão de arquitetura do order-service
+## Organização interna do `order-service`
 
-Clean Architecture em 4 camadas:
-- `domain/` — entidades puras (Order)
-- `application/` — use cases (CreateOrderService, ConfirmOrderService)
-- `infrastructure/` — repositório, publisher AMQP, configuração
-- `interfaces/` — controller HTTP (OrderController)
+A implementação está separada em quatro grupos:
 
-## Convenções de código
+- `domain/` — entidade `Order`;
+- `application/` — casos de uso de criação e confirmação;
+- `infrastructure/` — repositório, configuração AMQP e publisher;
+- `interfaces/` — controller HTTP.
 
-- Java: PascalCase para classes, camelCase para métodos/variáveis
-- Python: snake_case para variáveis e funções
-- Idioma do código: Inglês
-- Diagramas: Mermaid (inline no markdown, sem imagens binárias)
+Essa organização é **inspirada em Clean Architecture**, mas a implementação atual não é tratada como Clean Architecture estrita: `OrderRepository` ainda está em `infrastructure` e é importado pela camada de aplicação.
+
+A evolução prevista cria ports de saída em uma camada adequada e mantém adapters de persistência/mensageria em infraestrutura.
+
+## Contratos atuais
+
+### HTTP
+
+```text
+POST /orders
+POST /orders/{id}/confirm
+```
+
+### AMQP
+
+```text
+exchange: order.exchange
+routing key: order.created
+queue: order.created
+payload: id + productId + quantity + status
+```
+
+## Persistência
+
+A implementação atual usa `ConcurrentHashMap` através de `InMemoryOrderRepository`.
+
+Isso significa que:
+
+- pedidos não sobrevivem a restart;
+- não existe transação de banco;
+- persistência e publicação AMQP não são atômicas.
+
+## Testes atuais
+
+O repositório possui:
+
+- testes unitários de aplicação e controller Java;
+- testes unitários do worker Python;
+- cenários BDD em Cucumber.
+
+A suíte BDD atual observa a própria fila `order.created`, que também é consumida pelo scheduler. Por isso, o desenho atual não é adequado como prova distribuída determinística quando ambos estão ativos.
+
+## Infraestrutura
+
+- Docker Compose executa RabbitMQ, `order-service` e `scheduler-agent`;
+- `infra/terraform` é atualmente um placeholder documental, sem recursos Terraform implementados;
+- GitHub Actions executa lint, testes unitários e segurança, mas ainda não executa a stack distribuída completa como gate obrigatório.
+
+## Evolução aprovada
+
+O próximo estágio técnico adiciona:
+
+```text
+PostgreSQL
++ Transactional Outbox
++ order.created.v1
++ filas por consumidor
++ retry/DLQ
++ idempotência
++ E2E no CI
++ correlação/observabilidade
+```
+
+Para detalhes e trade-offs, consulte:
+
+- [`../05-evolucao/AUDITORIA_ESTADO_ATUAL.md`](../05-evolucao/AUDITORIA_ESTADO_ATUAL.md)
+- [`../05-evolucao/PLANO_EVOLUCAO_ARQUITETURAL.md`](../05-evolucao/PLANO_EVOLUCAO_ARQUITETURAL.md)
+- [`../../ROADMAP.md`](../../ROADMAP.md)
