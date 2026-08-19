@@ -4,7 +4,6 @@ import com.shop.order.application.ConfirmOrderService;
 import com.shop.order.application.CreateOrderService;
 import com.shop.order.application.GetOrderService;
 import com.shop.order.domain.Order;
-import com.shop.order.infrastructure.OrderEventPublisher;
 import java.time.Instant;
 import java.util.UUID;
 import org.springframework.http.HttpStatus;
@@ -20,17 +19,14 @@ import org.springframework.web.bind.annotation.RestController;
 @RequestMapping("/orders")
 public class OrderController {
   private final CreateOrderService createOrderService;
-  private final OrderEventPublisher eventPublisher;
   private final ConfirmOrderService confirmOrderService;
   private final GetOrderService getOrderService;
 
   public OrderController(
       CreateOrderService createOrderService,
-      OrderEventPublisher eventPublisher,
       ConfirmOrderService confirmOrderService,
       GetOrderService getOrderService) {
     this.createOrderService = createOrderService;
-    this.eventPublisher = eventPublisher;
     this.confirmOrderService = confirmOrderService;
     this.getOrderService = getOrderService;
   }
@@ -38,7 +34,6 @@ public class OrderController {
   @PostMapping
   public ResponseEntity<OrderCreatedResponse> create(@RequestBody CreateOrderRequest request) {
     Order order = createOrderService.create(request.productId(), request.quantity());
-    eventPublisher.publish(order);
     return ResponseEntity.status(HttpStatus.CREATED).body(new OrderCreatedResponse(order.getId()));
   }
 
