@@ -1,9 +1,8 @@
 name: PR17 format diagnostic
 
 on:
-  push:
-    branches:
-      - agent/microservice-shop-domain-postgres
+  pull_request:
+    branches: [main]
 
 permissions:
   contents: read
