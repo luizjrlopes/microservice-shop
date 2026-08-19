@@ -3,40 +3,49 @@ SCHEDULER_DIR := services/workers/scheduler-agent
 BDD_DIR := tests/bdd
 LLM_DIR := ml/llm
 
-.PHONY: help compose-up compose-down compose-logs lint test security         api-build api-test api-run api-lint         worker-install worker-run worker-lint worker-test         bdd-install bdd-test bdd-lint         llm-setup llm-notebook
+.PHONY: help compose-up compose-down compose-logs compose-observability lint test security e2e \
+        api-build api-test api-run api-lint \
+        worker-install worker-run worker-lint worker-test \
+        bdd-install bdd-test bdd-lint \
+        llm-setup llm-notebook
 
 help:
 	@echo "Targets disponíveis:"
-	@echo "  compose-up       - Sobe toda a stack com Docker Compose"
-	@echo "  compose-down     - Derruba a stack e remove volumes"
-	@echo "  compose-logs     - Segue os logs de todos os serviços"
-	@echo "  lint             - Executa linters e formatadores de todos os módulos"
-	@echo "  test             - Executa testes unitários dos módulos"
-	@echo "  security         - Roda checagens de segurança"
-	@echo "  api-build        - Executa mvn clean install no order-service"
-	@echo "  api-test         - Executa mvn test no order-service"
-	@echo "  api-lint         - Executa validação de formato (Spotless) no order-service"
-	@echo "  api-run          - Sobe o order-service localmente"
-	@echo "  worker-install   - Instala dependências (dev) do scheduler-agent"
-	@echo "  worker-run       - Inicia o scheduler-agent localmente"
-	@echo "  worker-lint      - Executa black/ruff no scheduler-agent"
-	@echo "  worker-test      - Executa pytest no scheduler-agent"
-	@echo "  bdd-install      - Instala dependências dos testes BDD"
-	@echo "  bdd-test         - Executa npm test em tests/bdd"
-	@echo "  bdd-lint         - Executa checagem TypeScript em tests/bdd"
-	@echo "  llm-setup        - Instala dependências dos notebooks de IA/LLM"
-	@echo "  llm-notebook     - Abre Jupyter Lab apontando para ml/llm/notebooks"
+	@echo "  compose-up             - Sobe a stack distribuída"
+	@echo "  compose-observability  - Sobe a stack + Prometheus"
+	@echo "  compose-down           - Derruba a stack e remove volumes"
+	@echo "  compose-logs           - Segue os logs de todos os serviços"
+	@echo "  lint                   - Executa quality gates"
+	@echo "  test                   - Executa testes Java e Python"
+	@echo "  security               - Executa checagens de segurança"
+	@echo "  e2e                    - Executa o BDD distribuído"
+	@echo "  api-build              - Executa mvn clean install no order-service"
+	@echo "  api-test               - Executa mvn test no order-service"
+	@echo "  api-lint               - Executa Spotless no order-service"
+	@echo "  api-run                - Sobe o order-service localmente"
+	@echo "  worker-install         - Instala dependências do scheduler-agent"
+	@echo "  worker-run             - Inicia o scheduler-agent localmente"
+	@echo "  worker-lint            - Executa black/ruff no scheduler-agent"
+	@echo "  worker-test            - Executa pytest no scheduler-agent"
+	@echo "  bdd-install            - Instala dependências dos testes BDD"
+	@echo "  bdd-test               - Executa Cucumber"
+	@echo "  bdd-lint               - Executa TypeScript check"
 
 lint: api-lint worker-lint bdd-lint
 
 test: api-test worker-test
 
 security:
-	bandit -q -r $(SCHEDULER_DIR)
-	cd $(BDD_DIR) && npm audit --omit=dev
+	bandit -q -r $(SCHEDULER_DIR) -x $(SCHEDULER_DIR)/tests
+	cd $(BDD_DIR) && npm audit --audit-level=high
+
+e2e: bdd-test
 
 compose-up:
-	docker compose up -d
+	docker compose up -d --build
+
+compose-observability:
+	docker compose --profile observability up -d --build
 
 compose-down:
 	docker compose down -v
@@ -70,7 +79,7 @@ worker-test:
 	PYTHONPATH=$(SCHEDULER_DIR) pytest $(SCHEDULER_DIR)/tests
 
 bdd-install:
-	cd $(BDD_DIR) && npm install
+	cd $(BDD_DIR) && npm ci
 
 bdd-test:
 	cd $(BDD_DIR) && npm test
