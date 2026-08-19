@@ -43,7 +43,8 @@ class CreateOrderTransactionalIntegrationTest {
   void persistsOrderAndOutboxTogetherAndRollsBackWhenOutboxCannotBeWritten() {
     service.create("SKU-ATOMIC", 2);
 
-    assertThat(jdbcTemplate.queryForObject("SELECT COUNT(*) FROM orders", Long.class)).isEqualTo(1L);
+    assertThat(jdbcTemplate.queryForObject("SELECT COUNT(*) FROM orders", Long.class))
+        .isEqualTo(1L);
     assertThat(jdbcTemplate.queryForObject("SELECT COUNT(*) FROM outbox_events", Long.class))
         .isEqualTo(1L);
 
