@@ -1,4 +1,3 @@
-version: "3.9"
 services:
   rabbitmq:
     image: rabbitmq:3-management
@@ -10,10 +9,13 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+    restart: unless-stopped
+
   order-service:
     build: ./services/api/order-service
     environment:
-      - RABBIT_URL=amqp://guest:guest@rabbitmq:5672
+      RABBIT_URL: amqp://guest:guest@rabbitmq:5672
+      ORDER_RETRY_DELAY_MS: "5000"
     ports:
       - "8080:8080"
     depends_on:
@@ -23,14 +25,21 @@ services:
       test: ["CMD", "curl", "-f", "http://localhost:8080/actuator/health"]
       interval: 10s
       timeout: 5s
-      retries: 5
+      retries: 10
+    restart: unless-stopped
+
   scheduler-agent:
     build: ./services/workers/scheduler-agent
     environment:
-      - RABBIT_URL=amqp://guest:guest@rabbitmq:5672
-      - ORDER_URL=http://order-service:8080
+      RABBIT_URL: amqp://guest:guest@rabbitmq:5672
+      ORDER_URL: http://order-service:8080
+      REQUEST_TIMEOUT_SECONDS: "5"
+      MAX_RETRIES: "3"
+      RETRY_DELAY_MS: "5000"
+      LOG_LEVEL: INFO
     depends_on:
       rabbitmq:
         condition: service_healthy
       order-service:
         condition: service_healthy
+    restart: unless-stopped
