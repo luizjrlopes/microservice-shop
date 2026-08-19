@@ -1,25 +1,101 @@
-# Roadmap
+# Roadmap — Microservice Shop
 
-Visão macro das próximas entregas para o Microservice Shop. As datas são estimativas e podem mudar conforme descobertas.
+Este roadmap descreve a sequência de evolução do projeto. Ele não usa datas artificiais: cada etapa só avança quando os critérios técnicos da etapa anterior estão satisfeitos.
 
-## Q2 2024 – Fundamentos
-1. **Cobertura de testes mínima** no `order-service` (unitários + integração AMQP).
-2. **Refinamento do scheduler**: substituir lógica síncrona por confirmações idempotentes e adicionar telemetria básica.
-3. **Infra de dados para IA**: padronizar export de eventos e pipelines de dados compartilhados com notebooks (`data/`).
+## Onda 0 — Verdade do projeto
 
-## Q3 2024 – Novos serviços e IA aplicada
-1. **Catalog-service** (Node/TypeScript) expondo `GET /products` e cache em Redis.
-2. **Auth-service** (ASP.NET Core) fornecendo JWT para proteger `order-service`.
-3. **AI Advisor**: microsserviço dedicado a recomendações, alimentado pelos notebooks de LLM; inicialmente expõe `POST /advice/orders` retornando explicações textuais.
+Objetivo: alinhar documentação, arquitetura descrita e capacidades reais.
 
-## Q4 2024 – Observabilidade e automação
-1. **Tracing distribuído** com OpenTelemetry em todos os serviços.
-2. **Playbooks gerados por LLM** integrados ao scheduler (sugestões de recuperação diretamente nos logs).
-3. **Pipeline CI/CD** executando notebooks críticos em modo headless para garantir reprodutibilidade.
+- [x] auditar o estado atual;
+- [x] definir arquitetura-alvo;
+- [ ] reposicionar README e visão de produto;
+- [ ] eliminar contradições entre documentação e código;
+- [ ] marcar documentos históricos como não canônicos;
+- [ ] consolidar fontes de arquitetura e evolução.
 
-## Backlog estratégico
-- Persistência real (PostgreSQL) para pedidos e histórico de eventos.
-- Suporte a múltiplas filas (dead-letter, retries) com políticas configuráveis.
-- Dashboards que combinam métricas tradicionais e insights dos modelos generativos.
+**Saída:** qualquer pessoa deve conseguir distinguir claramente o que está implementado, o que está planejado e o que é histórico.
 
-Acompanhe mudanças confirmadas no [`CHANGELOG.md`](CHANGELOG.md) e utilize issues/PRs para propor replanejamentos.
+## Onda 1 — Confiabilidade e consistência
+
+Objetivo: transformar o fluxo de pedidos em um fluxo distribuído tecnicamente consistente.
+
+- [ ] introduzir PostgreSQL como persistência do `order-service`;
+- [ ] versionar migrações;
+- [ ] modelar `OrderStatus` e invariantes de domínio;
+- [ ] adicionar `GET /orders/{id}`;
+- [ ] implementar Transactional Outbox;
+- [ ] criar publisher de eventos pendentes;
+- [ ] versionar `order.created.v1` com identidade e correlação;
+- [ ] separar nomes de evento das filas de consumidores;
+- [ ] corrigir ACK do worker;
+- [ ] implementar timeout HTTP;
+- [ ] implementar retry com atraso;
+- [ ] implementar Dead Letter Queue;
+- [ ] tornar confirmação repetida idempotente.
+
+**Saída:** persistir pedido e registrar evento na mesma transação; processamento assíncrono tolerante a reentrega e falhas transitórias.
+
+## Onda 2 — Provas automatizadas
+
+Objetivo: provar as propriedades arquiteturais no CI.
+
+- [ ] ampliar testes unitários de domínio e políticas de retry;
+- [ ] adicionar testes de integração com PostgreSQL;
+- [ ] adicionar testes de integração com RabbitMQ;
+- [ ] validar Outbox e publicação;
+- [ ] criar fila exclusiva de auditoria para BDD;
+- [ ] provar `POST /orders -> evento -> worker -> CONFIRMED`;
+- [ ] usar `npm ci` no CI;
+- [ ] executar auditoria real das dependências usadas;
+- [ ] separar pipeline em quality, unit-tests, security e integration-e2e;
+- [ ] publicar logs dos containers como artifact em falhas E2E.
+
+**Saída:** uma PR não fica verde se o ciclo distribuído real estiver quebrado.
+
+## Onda 3 — Observabilidade
+
+Objetivo: tornar o fluxo assíncrono rastreável sem tornar o ambiente local pesado.
+
+- [ ] logs JSON estruturados;
+- [ ] `correlationId`, `eventId` e `orderId` ponta a ponta;
+- [ ] métricas de pedidos, Outbox, retries e DLQ;
+- [ ] instrumentação OpenTelemetry;
+- [ ] profile opcional de observabilidade no Compose;
+- [ ] documentação de troubleshooting orientada a sinais.
+
+**Saída:** um pedido pode ser rastreado entre API, banco, broker e worker.
+
+## Onda 4 — Diferenciação
+
+Somente após o core distribuído estar estável, escolher **uma** frente principal de diferenciação.
+
+### Opção A — Cloud/IaC real
+
+- IaC executável para uma arquitetura coerente;
+- pipeline de build/deploy;
+- smoke tests e estratégia de rollback.
+
+### Opção B — ML integrado
+
+- selecionar um dos experimentos atuais;
+- definir contrato de entrada/saída;
+- integrar ao fluxo sem bloquear o processamento principal;
+- medir qualidade e comportamento operacional.
+
+A decisão entre A e B deve ser registrada por ADR. Não implementar as duas frentes simultaneamente sem justificativa.
+
+## Fora do roadmap imediato
+
+Não fazem parte das ondas atuais:
+
+- `catalog-service` apenas para aumentar o número de serviços;
+- `auth-service` separado sem necessidade de produto;
+- `payment-service`;
+- frontend;
+- Kubernetes;
+- múltiplas clouds;
+- `AI Advisor`/LLM sem feature real implementada.
+
+## Referência arquitetural
+
+A motivação e os critérios completos estão em [`docs/05-evolucao/PLANO_EVOLUCAO_ARQUITETURAL.md`](docs/05-evolucao/PLANO_EVOLUCAO_ARQUITETURAL.md).
