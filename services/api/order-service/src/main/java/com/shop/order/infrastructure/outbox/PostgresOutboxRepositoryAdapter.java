@@ -40,9 +40,7 @@ public class PostgresOutboxRepositoryAdapter implements OutboxRepository {
   @Override
   @Transactional(readOnly = true)
   public List<PendingOutboxEvent> findPending(int limit) {
-    return repository
-        .findByPublishedAtIsNullOrderByOccurredAtAsc(PageRequest.of(0, limit))
-        .stream()
+    return repository.findByPublishedAtIsNullOrderByOccurredAtAsc(PageRequest.of(0, limit)).stream()
         .map(JpaOutboxEventEntity::toPending)
         .toList();
   }
