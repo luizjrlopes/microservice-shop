@@ -1,6 +1,9 @@
 services:
   rabbitmq:
     image: rabbitmq:3-management
+    environment:
+      RABBITMQ_DEFAULT_USER: shop
+      RABBITMQ_DEFAULT_PASS: shop-local
     ports:
       - "5672:5672"
       - "15672:15672"
@@ -14,7 +17,10 @@ services:
   order-service:
     build: ./services/api/order-service
     environment:
-      RABBIT_URL: amqp://guest:guest@rabbitmq:5672
+      RABBITMQ_HOST: rabbitmq
+      RABBITMQ_PORT: "5672"
+      RABBITMQ_USERNAME: shop
+      RABBITMQ_PASSWORD: shop-local
       ORDER_RETRY_DELAY_MS: "5000"
     ports:
       - "8080:8080"
@@ -31,7 +37,7 @@ services:
   scheduler-agent:
     build: ./services/workers/scheduler-agent
     environment:
-      RABBIT_URL: amqp://guest:guest@rabbitmq:5672
+      RABBIT_URL: amqp://shop:shop-local@rabbitmq:5672
       ORDER_URL: http://order-service:8080
       REQUEST_TIMEOUT_SECONDS: "5"
       MAX_RETRIES: "3"
