@@ -33,8 +33,12 @@ class PublishPendingOutboxEventsServiceTest {
     service.publishPending();
 
     verify(publisher).publish(event);
-    verify(repository).markPublished(org.mockito.ArgumentMatchers.eq(event.id()), org.mockito.ArgumentMatchers.any(Instant.class));
-    verify(repository, never()).recordFailure(org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any());
+    verify(repository)
+        .markPublished(
+            org.mockito.ArgumentMatchers.eq(event.id()),
+            org.mockito.ArgumentMatchers.any(Instant.class));
+    verify(repository, never())
+        .recordFailure(org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any());
   }
 
   @Test
@@ -56,13 +60,6 @@ class PublishPendingOutboxEventsServiceTest {
     UUID id = UUID.randomUUID();
     UUID orderId = UUID.randomUUID();
     return new PendingOutboxEvent(
-        id,
-        "order.created",
-        1,
-        orderId,
-        orderId,
-        "{\"eventId\":\"" + id + "\"}",
-        Instant.now(),
-        0);
+        id, "order.created", 1, orderId, orderId, "{\"eventId\":\"" + id + "\"}", Instant.now(), 0);
   }
 }
