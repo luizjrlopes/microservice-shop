@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "scripts": {
     "lint": "tsc --noEmit --skipLibCheck",
-    "test": "cucumber-js --require-module ts-node/register --require features/steps/**/*.ts features/**/*.feature"
+    "test": "cucumber-js"
   },
   "devDependencies": {
     "@cucumber/cucumber": "^13.2.1",
