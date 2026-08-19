@@ -1,0 +1,74 @@
+name: PR17 PostgreSQL smoke
+
+on:
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  persistence-restart:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build and start stack
+        run: docker compose up -d --build
+      - name: Wait for order service
+        run: |
+          for attempt in $(seq 1 60); do
+            if curl --fail --silent http://localhost:8080/actuator/health >/dev/null; then
+              exit 0
+            fi
+            sleep 2
+          done
+          docker compose ps --all
+          docker compose logs --no-color
+          exit 1
+      - name: Create and read persisted order
+        run: |
+          response=$(curl --fail --silent -X POST http://localhost:8080/orders \
+            -H 'Content-Type: application/json' \
+            -d '{"productId":"SMOKE-SKU","quantity":2}')
+          order_id=$(printf '%s' "$response" | python -c 'import json,sys; print(json.load(sys.stdin)["id"])')
+          test -n "$order_id"
+          echo "$order_id" > /tmp/order-id
+          curl --fail --silent "http://localhost:8080/orders/$order_id" | tee /tmp/order-before.json
+          python - <<'PY'
+          import json
+          with open('/tmp/order-before.json', encoding='utf-8') as f:
+              order = json.load(f)
+          assert order['productId'] == 'SMOKE-SKU'
+          assert order['quantity'] == 2
+          PY
+      - name: Restart only order service
+        run: docker compose restart order-service
+      - name: Wait for restarted order service
+        run: |
+          for attempt in $(seq 1 60); do
+            if curl --fail --silent http://localhost:8080/actuator/health >/dev/null; then
+              exit 0
+            fi
+            sleep 2
+          done
+          exit 1
+      - name: Verify order survived application restart
+        run: |
+          order_id=$(cat /tmp/order-id)
+          curl --fail --silent "http://localhost:8080/orders/$order_id" | tee /tmp/order-after.json
+          python - <<'PY'
+          import json
+          with open('/tmp/order-after.json', encoding='utf-8') as f:
+              order = json.load(f)
+          assert order['productId'] == 'SMOKE-SKU'
+          assert order['quantity'] == 2
+          assert order['status'] in {'PENDING', 'CONFIRMED'}
+          PY
+      - name: Print diagnostics
+        if: always()
+        run: |
+          docker compose ps --all || true
+          docker compose logs --no-color || true
+      - name: Stop stack
+        if: always()
+        run: docker compose down -v
