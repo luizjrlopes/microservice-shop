@@ -6,7 +6,8 @@
 
 | Componente | Linguagem | Framework / libs | Comunicação |
 |---|---|---|---|
-| `order-service` | Java 17 | Spring Boot 3, Spring AMQP | HTTP + AMQP |
+| `order-service` | Java 17 | Spring Boot 3, Spring AMQP, Spring Data JPA | HTTP + SQL + AMQP |
+| PostgreSQL | — | PostgreSQL 16 + Flyway | SQL |
 | `scheduler-agent` | Python 3.11 | pika, requests | AMQP + HTTP |
 | `tests/bdd` | TypeScript | Cucumber, Axios, amqplib | HTTP + AMQP |
 | `ml/experiments` | Python | pandas, scikit-learn | scripts standalone |
@@ -23,9 +24,12 @@ microservice-shop/
 │   │   └── src/main/java/com/shop/order/
 │   │       ├── domain/
 │   │       ├── application/
+│   │       │   └── ports/
 │   │       ├── infrastructure/
+│   │       │   └── persistence/
 │   │       └── interfaces/
 │   └── workers/scheduler-agent/
+├── contracts/
 ├── tests/bdd/
 ├── ml/experiments/
 ├── ml/llm/
@@ -40,7 +44,8 @@ microservice-shop/
 ```mermaid
 flowchart LR
     Client[Cliente] -->|POST /orders| API[order-service]
-    API --> MEM[(InMemoryOrderRepository)]
+    Client -->|GET /orders/{id}| API
+    API -->|JPA| DB[(PostgreSQL)]
     API -->|order.created| EX{{order.exchange}}
     EX --> Q[order.created]
     Q --> W[scheduler-agent]
@@ -49,16 +54,14 @@ flowchart LR
 
 ## Organização interna do `order-service`
 
-A implementação está separada em quatro grupos:
+A implementação mantém separação entre:
 
-- `domain/` — entidade `Order`;
-- `application/` — casos de uso de criação e confirmação;
-- `infrastructure/` — repositório, configuração AMQP e publisher;
-- `interfaces/` — controller HTTP.
+- `domain/` — entidade `Order`, invariantes e `OrderStatus`;
+- `application/` — casos de uso e ports de saída;
+- `infrastructure/` — adapters JPA/PostgreSQL, configuração AMQP e publisher;
+- `interfaces/` — controller e tratamento HTTP de erros.
 
-Essa organização é **inspirada em Clean Architecture**, mas a implementação atual não é tratada como Clean Architecture estrita: `OrderRepository` ainda está em `infrastructure` e é importado pela camada de aplicação.
-
-A evolução prevista cria ports de saída em uma camada adequada e mantém adapters de persistência/mensageria em infraestrutura.
+`OrderRepository` agora é um port da camada de aplicação. `PostgresOrderRepositoryAdapter` implementa esse contrato em infraestrutura.
 
 ## Contratos atuais
 
@@ -66,10 +69,15 @@ A evolução prevista cria ports de saída em uma camada adequada e mantém adap
 
 ```text
 POST /orders
+GET  /orders/{id}
 POST /orders/{id}/confirm
 ```
 
+A criação rejeita `productId` vazio e quantidade não positiva. Pedido inexistente é tratado como `404`.
+
 ### AMQP
+
+O runtime ainda usa temporariamente o contrato legado:
 
 ```text
 exchange: order.exchange
@@ -78,45 +86,55 @@ queue: order.created
 payload: id + productId + quantity + status
 ```
 
+O contrato-alvo `order.created.v1` já existe em `contracts/`, mas só será adotado pelo runtime junto com Transactional Outbox.
+
 ## Persistência
 
-A implementação atual usa `ConcurrentHashMap` através de `InMemoryOrderRepository`.
+Pedidos são persistidos no PostgreSQL via Spring Data JPA. O schema é versionado por Flyway e validado pelo Hibernate (`ddl-auto=validate`).
 
-Isso significa que:
+Isso garante que os pedidos sobrevivam ao restart do `order-service` e cria a base transacional necessária para o Outbox.
 
-- pedidos não sobrevivem a restart;
-- não existe transação de banco;
-- persistência e publicação AMQP não são atômicas.
+A limitação atual continua sendo o **dual write**:
+
+```text
+commit PostgreSQL
+      ↓
+publish RabbitMQ
+```
+
+Uma falha entre essas duas operações ainda pode deixar estado e evento inconsistentes. A PR de Transactional Outbox elimina essa janela.
 
 ## Testes atuais
 
 O repositório possui:
 
-- testes unitários de aplicação e controller Java;
+- testes unitários de domínio/casos de uso e controller Java;
+- teste do adapter de persistência contra PostgreSQL real via Testcontainers;
 - testes unitários do worker Python;
 - cenários BDD em Cucumber.
 
-A suíte BDD atual observa a própria fila `order.created`, que também é consumida pelo scheduler. Por isso, o desenho atual não é adequado como prova distribuída determinística quando ambos estão ativos.
+A suíte BDD atual ainda observa a fila usada pelo scheduler, por isso será redesenhada antes de virar gate E2E distribuído definitivo.
 
 ## Infraestrutura
 
-- Docker Compose executa RabbitMQ, `order-service` e `scheduler-agent`;
-- `infra/terraform` é atualmente um placeholder documental, sem recursos Terraform implementados;
-- GitHub Actions executa lint, testes unitários e segurança, mas ainda não executa a stack distribuída completa como gate obrigatório.
+O Docker Compose executa:
 
-## Evolução aprovada
+- PostgreSQL;
+- RabbitMQ com credencial local explícita;
+- `order-service`;
+- `scheduler-agent`.
 
-O próximo estágio técnico adiciona:
+`infra/terraform` continua documental e não deve ser apresentado como IaC implementado.
+
+## Próximas etapas
 
 ```text
-PostgreSQL
-+ Transactional Outbox
-+ order.created.v1
-+ filas por consumidor
-+ retry/DLQ
-+ idempotência
-+ E2E no CI
-+ correlação/observabilidade
+Transactional Outbox
+-> order.created.v1 no runtime
+-> filas por consumidor
+-> retry/DLQ
+-> E2E distribuído no CI
+-> correlação/observabilidade
 ```
 
 Para detalhes e trade-offs, consulte:

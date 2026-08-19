@@ -1,7 +1,7 @@
 package com.shop.order.application;
 
+import com.shop.order.application.ports.OrderRepository;
 import com.shop.order.domain.Order;
-import com.shop.order.infrastructure.OrderRepository;
 import org.springframework.stereotype.Service;
 
 @Service

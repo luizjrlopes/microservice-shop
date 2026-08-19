@@ -1,7 +1,25 @@
-version: "3.9"
 services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: microservice_shop
+      POSTGRES_USER: microservice_shop
+      POSTGRES_PASSWORD: microservice_shop
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U microservice_shop -d microservice_shop"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+
   rabbitmq:
     image: rabbitmq:3-management
+    environment:
+      RABBITMQ_DEFAULT_USER: microservice_shop
+      RABBITMQ_DEFAULT_PASS: microservice_shop
     ports:
       - "5672:5672"
       - "15672:15672"
@@ -10,27 +28,41 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+
   order-service:
     build: ./services/api/order-service
     environment:
-      - RABBIT_URL=amqp://guest:guest@rabbitmq:5672
+      DB_URL: jdbc:postgresql://postgres:5432/microservice_shop
+      DB_USER: microservice_shop
+      DB_PASSWORD: microservice_shop
+      RABBIT_HOST: rabbitmq
+      RABBIT_PORT: "5672"
+      RABBIT_USER: microservice_shop
+      RABBIT_PASSWORD: microservice_shop
     ports:
       - "8080:8080"
     depends_on:
+      postgres:
+        condition: service_healthy
       rabbitmq:
         condition: service_healthy
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8080/actuator/health"]
       interval: 10s
       timeout: 5s
-      retries: 5
+      retries: 10
+      start_period: 10s
+
   scheduler-agent:
     build: ./services/workers/scheduler-agent
     environment:
-      - RABBIT_URL=amqp://guest:guest@rabbitmq:5672
-      - ORDER_URL=http://order-service:8080
+      RABBIT_URL: amqp://microservice_shop:microservice_shop@rabbitmq:5672
+      ORDER_URL: http://order-service:8080
     depends_on:
       rabbitmq:
         condition: service_healthy
       order-service:
         condition: service_healthy
+
+volumes:
+  postgres-data:

@@ -15,7 +15,10 @@ public class OrderEventPublisher {
   public void publish(Order order) {
     var event =
         new OrderCreatedEvent(
-            order.getId(), order.getProductId(), order.getQuantity(), order.getStatus());
+            order.getId().toString(),
+            order.getProductId(),
+            order.getQuantity(),
+            order.getStatus().name());
     rabbitTemplate.convertAndSend("order.exchange", "order.created", event);
   }
 

@@ -1,60 +1,68 @@
 # Roadmap — Microservice Shop
 
-Este roadmap descreve a sequência de evolução do projeto. Ele não usa datas artificiais: cada etapa só avança quando os critérios técnicos da etapa anterior estão satisfeitos.
+Este roadmap descreve a sequência de evolução do projeto. Cada etapa só avança quando os critérios técnicos da etapa anterior estão satisfeitos.
 
 ## Onda 0 — Verdade do projeto
 
-Objetivo: alinhar documentação, arquitetura descrita e capacidades reais.
-
 - [x] auditar o estado atual;
 - [x] definir arquitetura-alvo;
-- [ ] reposicionar README e visão de produto;
-- [ ] eliminar contradições entre documentação e código;
-- [ ] marcar documentos históricos como não canônicos;
-- [ ] consolidar fontes de arquitetura e evolução.
+- [x] reposicionar README e visão de produto;
+- [x] eliminar contradições principais entre documentação e código;
+- [x] marcar documentos históricos como não canônicos;
+- [x] consolidar fontes de arquitetura e evolução;
+- [x] definir `order.created.v1` em JSON Schema + AsyncAPI;
+- [x] registrar ADR de Transactional Outbox;
+- [x] registrar ADR de at-least-once + retry/DLQ.
 
-**Saída:** qualquer pessoa deve conseguir distinguir claramente o que está implementado, o que está planejado e o que é histórico.
+**Gate:** concluído.
 
 ## Onda 1 — Confiabilidade e consistência
 
-Objetivo: transformar o fluxo de pedidos em um fluxo distribuído tecnicamente consistente.
+### Fundação de domínio e persistência — PR-02
 
-- [ ] introduzir PostgreSQL como persistência do `order-service`;
-- [ ] versionar migrações;
-- [ ] modelar `OrderStatus` e invariantes de domínio;
-- [ ] adicionar `GET /orders/{id}`;
+- [x] introduzir PostgreSQL como persistência do `order-service`;
+- [x] versionar migrações com Flyway;
+- [x] modelar `OrderStatus` e invariantes de domínio;
+- [x] mover o port de repositório para a camada de aplicação;
+- [x] adicionar adapter PostgreSQL;
+- [x] adicionar `GET /orders/{id}`;
+- [x] tornar confirmação repetida segura no domínio;
+- [x] validar persistência com PostgreSQL real via Testcontainers.
+
+### Consistência estado + evento — PR-03
+
 - [ ] implementar Transactional Outbox;
 - [ ] criar publisher de eventos pendentes;
-- [ ] versionar `order.created.v1` com identidade e correlação;
-- [ ] separar nomes de evento das filas de consumidores;
+- [ ] adotar `order.created.v1` no runtime;
+- [ ] remover publicação direta depois de `save`;
+- [ ] provar que falha do broker deixa evento pendente.
+
+### Semântica de entrega — PR-04
+
+- [ ] separar filas por consumidor;
 - [ ] corrigir ACK do worker;
 - [ ] implementar timeout HTTP;
 - [ ] implementar retry com atraso;
 - [ ] implementar Dead Letter Queue;
-- [ ] tornar confirmação repetida idempotente.
+- [ ] preservar identidade/correlação durante retries;
+- [ ] provar que reentrega não produz efeito de negócio incorreto.
 
-**Saída:** persistir pedido e registrar evento na mesma transação; processamento assíncrono tolerante a reentrega e falhas transitórias.
+**Gate da Onda 1:** falha de rede não pode causar perda silenciosa de mensagem.
 
 ## Onda 2 — Provas automatizadas
 
-Objetivo: provar as propriedades arquiteturais no CI.
-
-- [ ] ampliar testes unitários de domínio e políticas de retry;
-- [ ] adicionar testes de integração com PostgreSQL;
-- [ ] adicionar testes de integração com RabbitMQ;
-- [ ] validar Outbox e publicação;
+- [ ] ampliar testes unitários de políticas de entrega;
+- [ ] adicionar integração RabbitMQ/Outbox;
 - [ ] criar fila exclusiva de auditoria para BDD;
 - [ ] provar `POST /orders -> evento -> worker -> CONFIRMED`;
-- [ ] usar `npm ci` no CI;
+- [ ] usar instalações determinísticas no CI;
 - [ ] executar auditoria real das dependências usadas;
 - [ ] separar pipeline em quality, unit-tests, security e integration-e2e;
 - [ ] publicar logs dos containers como artifact em falhas E2E.
 
-**Saída:** uma PR não fica verde se o ciclo distribuído real estiver quebrado.
+**Gate:** uma PR não fica verde se o ciclo distribuído real estiver quebrado.
 
 ## Onda 3 — Observabilidade
-
-Objetivo: tornar o fluxo assíncrono rastreável sem tornar o ambiente local pesado.
 
 - [ ] logs JSON estruturados;
 - [ ] `correlationId`, `eventId` e `orderId` ponta a ponta;
@@ -63,33 +71,31 @@ Objetivo: tornar o fluxo assíncrono rastreável sem tornar o ambiente local pes
 - [ ] profile opcional de observabilidade no Compose;
 - [ ] documentação de troubleshooting orientada a sinais.
 
-**Saída:** um pedido pode ser rastreado entre API, banco, broker e worker.
+**Gate:** deve ser possível responder onde um pedido parou sem editar código.
 
 ## Onda 4 — Diferenciação
 
-Somente após o core distribuído estar estável, escolher **uma** frente principal de diferenciação.
+Somente após o core distribuído estar estável, escolher **uma** frente principal:
 
 ### Opção A — Cloud/IaC real
 
 - IaC executável para uma arquitetura coerente;
 - pipeline de build/deploy;
-- smoke tests e estratégia de rollback.
+- smoke tests e rollback.
 
 ### Opção B — ML integrado
 
-- selecionar um dos experimentos atuais;
+- selecionar um experimento atual;
 - definir contrato de entrada/saída;
-- integrar ao fluxo sem bloquear o processamento principal;
+- integrar sem bloquear o processamento principal;
 - medir qualidade e comportamento operacional.
 
-A decisão entre A e B deve ser registrada por ADR. Não implementar as duas frentes simultaneamente sem justificativa.
+A decisão entre A e B deve ser registrada por ADR.
 
 ## Fora do roadmap imediato
 
-Não fazem parte das ondas atuais:
-
 - `catalog-service` apenas para aumentar o número de serviços;
-- `auth-service` separado sem necessidade de produto;
+- `auth-service` separado sem necessidade concreta;
 - `payment-service`;
 - frontend;
 - Kubernetes;

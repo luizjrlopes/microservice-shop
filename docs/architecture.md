@@ -1,13 +1,14 @@
 # Arquitetura Atual — Microservice Shop
 
-> Este documento descreve **somente o que está implementado hoje**. A arquitetura-alvo está em [`05-evolucao/PLANO_EVOLUCAO_ARQUITETURAL.md`](05-evolucao/PLANO_EVOLUCAO_ARQUITETURAL.md).
+> Este documento descreve **somente o que está implementado nesta versão**. A arquitetura-alvo está em [`05-evolucao/PLANO_EVOLUCAO_ARQUITETURAL.md`](05-evolucao/PLANO_EVOLUCAO_ARQUITETURAL.md).
 
 ## Visão em alto nível
 
 ```mermaid
 flowchart LR
     Client((Cliente REST)) -->|POST /orders| OrderService
-    OrderService[order-service\nSpring Boot] -->|save| Repo[(InMemoryOrderRepository)]
+    Client -->|GET /orders/{id}| OrderService
+    OrderService[order-service\nSpring Boot] -->|JPA| PostgreSQL[(PostgreSQL)]
     OrderService -->|order.created| RabbitMQ[(RabbitMQ)]
     RabbitMQ --> Scheduler[scheduler-agent\nPython]
     Scheduler -->|POST /orders/{id}/confirm| OrderService
@@ -17,8 +18,9 @@ flowchart LR
 
 | Componente | Tecnologia | Responsabilidade atual |
 |---|---|---|
-| `order-service` | Java 17 + Spring Boot | cria e confirma pedidos; publica `order.created` |
-| `InMemoryOrderRepository` | Java | mantém pedidos durante a vida do processo |
+| `order-service` | Java 17 + Spring Boot | cria, consulta e confirma pedidos; publica `order.created` |
+| PostgreSQL | PostgreSQL 16 | persiste pedidos |
+| Flyway | Flyway | versiona o schema de dados |
 | RabbitMQ | AMQP | transporta eventos entre produtor e consumidor |
 | `scheduler-agent` | Python 3.11 + pika + requests | consome evento e chama a confirmação HTTP |
 | `tests/bdd` | TypeScript + Cucumber | exercita API e RabbitMQ |
@@ -27,12 +29,34 @@ flowchart LR
 
 | Método | Rota | Comportamento |
 |---|---|---|
-| `POST` | `/orders` | cria um pedido e retorna `201` com `{ "id": string }` |
-| `POST` | `/orders/{id}/confirm` | marca o pedido como `CONFIRMED` e retorna `200` |
+| `POST` | `/orders` | cria pedido `PENDING` e retorna `201` com o ID |
+| `GET` | `/orders/{id}` | retorna o estado persistido do pedido |
+| `POST` | `/orders/{id}/confirm` | confirma o pedido e retorna `200` |
 
-O estado atual ainda não expõe `GET /orders/{id}`.
+Entradas inválidas de criação retornam `400`; pedido inexistente retorna `404`.
+
+## Domínio
+
+`Order` agora possui:
+
+- ID UUID;
+- `productId` obrigatório;
+- `quantity > 0`;
+- `OrderStatus` explícito (`PENDING`, `CONFIRMED`);
+- timestamps de criação/atualização;
+- confirmação repetida segura.
+
+O contrato `OrderRepository` é um port da camada de aplicação. A implementação PostgreSQL fica em `infrastructure/persistence`.
+
+## Persistência
+
+A persistência usa Spring Data JPA sobre PostgreSQL. O schema é criado por `V1__create_orders.sql` e o Hibernate opera em modo `validate`, evitando criação implícita de tabelas.
+
+O adapter de persistência possui teste contra PostgreSQL real via Testcontainers.
 
 ## Contrato AMQP atual
+
+O runtime ainda publica o contrato legado:
 
 | Item | Valor |
 |---|---|
@@ -41,52 +65,40 @@ O estado atual ainda não expõe `GET /orders/{id}`.
 | Fila | `order.created` |
 | Payload | `{ id, productId, quantity, status }` |
 
-Essa topologia funciona para o fluxo mínimo, mas conflui conceito de evento e fila do consumidor. A evolução aprovada separa esses papéis e introduz versionamento explícito.
+O contrato `order.created.v1` já está definido em `contracts/`, mas sua adoção no runtime pertence à PR de Transactional Outbox.
 
-## Persistência atual
+## Limitação estrutural atual
 
-O `order-service` usa `InMemoryOrderRepository`, baseado em `ConcurrentHashMap`.
+Persistir o pedido e publicar no RabbitMQ continuam sendo duas operações separadas:
 
-Consequências:
+```text
+PostgreSQL commit
+      ↓
+RabbitMQ publish
+```
 
-- reiniciar o processo remove os pedidos;
-- não há transação de banco;
-- não é possível garantir atomicidade entre persistência e publicação;
-- o desenho atual é adequado apenas ao estágio presente do projeto.
+Essa janela de dual write é conhecida e será removida pela Transactional Outbox na próxima etapa.
 
-## Fronteiras arquiteturais
+O worker também ainda mantém a semântica de entrega antiga; timeout, ACK correto, retry e DLQ pertencem à etapa seguinte.
 
-O código está organizado em `domain`, `application`, `infrastructure` e `interfaces`, inspirado em Clean Architecture. Entretanto, o contrato `OrderRepository` ainda reside em `infrastructure` e é importado pelos casos de uso.
+## Execução local
 
-Por isso, a documentação **não afirma que a implementação atual segue Clean Architecture estrita**. A evolução prevista move ports de saída para uma camada adequada e mantém adapters em infraestrutura.
-
-## Limitações distribuídas conhecidas
-
-As limitações mais importantes hoje são:
-
-- ACK do worker não depende de sucesso real da operação HTTP;
-- chamada HTTP sem timeout explícito;
-- ausência de retry/DLQ completos;
-- dual write entre persistência do pedido e publicação no broker;
-- confirmação não modelada como operação idempotente explícita;
-- evento sem envelope/versionamento/correlação suficientes;
-- BDD competindo pela fila do worker;
-- CI sem gate E2E distribuído.
-
-Esses pontos não são bugs escondidos da documentação: estão registrados formalmente na [`05-evolucao/AUDITORIA_ESTADO_ATUAL.md`](05-evolucao/AUDITORIA_ESTADO_ATUAL.md).
-
-## Arquitetura-alvo
-
-A evolução aprovada introduz:
+O Docker Compose contém:
 
 - PostgreSQL;
-- Transactional Outbox;
-- evento `order.created.v1`;
-- fila exclusiva do `scheduler-agent`;
-- retry com atraso e DLQ;
-- idempotência;
-- contratos versionados;
-- E2E distribuído no CI;
-- observabilidade correlacionada.
+- RabbitMQ com credencial local explícita;
+- `order-service`;
+- `scheduler-agent`.
 
-O detalhamento e a sequência estão em [`05-evolucao/PLANO_EVOLUCAO_ARQUITETURAL.md`](05-evolucao/PLANO_EVOLUCAO_ARQUITETURAL.md) e no [`../ROADMAP.md`](../ROADMAP.md).
+O `order-service` espera PostgreSQL e RabbitMQ saudáveis antes de iniciar o fluxo.
+
+## Próximas mudanças
+
+A próxima evolução adiciona:
+
+- tabela `outbox_events`;
+- persistência atômica de pedido + evento;
+- publisher de Outbox;
+- adoção runtime de `order.created.v1`.
+
+Depois disso entram semântica at-least-once, retry/DLQ, E2E distribuído e observabilidade.

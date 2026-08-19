@@ -7,17 +7,14 @@ import java.util.UUID;
 import org.springframework.stereotype.Service;
 
 @Service
-public class ConfirmOrderService {
+public class GetOrderService {
   private final OrderRepository repository;
 
-  public ConfirmOrderService(OrderRepository repository) {
+  public GetOrderService(OrderRepository repository) {
     this.repository = repository;
   }
 
-  public Order confirm(UUID id) {
-    Order order = repository.findById(id).orElseThrow(() -> new OrderNotFoundException(id));
-    order.confirm();
-    repository.update(order);
-    return order;
+  public Order get(UUID id) {
+    return repository.findById(id).orElseThrow(() -> new OrderNotFoundException(id));
   }
 }
