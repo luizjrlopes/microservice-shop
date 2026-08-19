@@ -66,9 +66,7 @@ def test_on_message_retries_transient_http_failure(monkeypatch):
     method = _method("tag")
     properties = _properties()
     body = json.dumps({"id": "order-1"}).encode()
-    monkeypatch.setattr(
-        "app.requests.post", MagicMock(side_effect=requests.Timeout("timed out"))
-    )
+    monkeypatch.setattr("app.requests.post", MagicMock(side_effect=requests.Timeout("timed out")))
 
     app.on_message(channel, method, properties, body)
 
@@ -80,13 +78,9 @@ def test_on_message_retries_transient_http_failure(monkeypatch):
 def test_on_message_dead_letters_after_retry_budget(monkeypatch):
     channel = MagicMock()
     method = _method("tag")
-    properties = _properties(
-        {"x-death": [{"queue": app.QUEUE_NAME, "count": app.MAX_RETRIES}]}
-    )
+    properties = _properties({"x-death": [{"queue": app.QUEUE_NAME, "count": app.MAX_RETRIES}]})
     body = json.dumps({"id": "order-1"}).encode()
-    monkeypatch.setattr(
-        "app.requests.post", MagicMock(side_effect=requests.Timeout("timed out"))
-    )
+    monkeypatch.setattr("app.requests.post", MagicMock(side_effect=requests.Timeout("timed out")))
 
     app.on_message(channel, method, properties, body)
 
