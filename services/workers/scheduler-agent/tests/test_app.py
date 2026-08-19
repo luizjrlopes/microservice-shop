@@ -32,7 +32,10 @@ def test_on_message_posts_confirmation_request_and_acknowledges(monkeypatch):
 
     post_mock.assert_called_once_with(
         f"{app.ORDER_URL}/orders/order-1/confirm",
-        headers={"Idempotency-Key": "event-1", "X-Correlation-Id": "order-1"},
+        headers={
+            "Idempotency-Key": "event-1",
+            "X-Correlation-Id": "order-1",
+        },
         timeout=app.REQUEST_TIMEOUT_SECONDS,
     )
     response.raise_for_status.assert_called_once_with()
