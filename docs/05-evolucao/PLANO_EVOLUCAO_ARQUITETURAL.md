@@ -31,7 +31,7 @@ Esse posicionamento é mais forte do que adicionar `catalog-service`, `auth-serv
 
 A base atual possui elementos que valem preservar:
 
-- `order-service` em Java 17 + Spring Boot;
+- `order-service` em Java 25 + Spring Boot;
 - separação entre `domain`, `application`, `infrastructure` e `interfaces`;
 - `scheduler-agent` em Python consumindo RabbitMQ;
 - comunicação HTTP + AMQP entre processos distintos;

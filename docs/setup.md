@@ -6,7 +6,7 @@ Este guia consolida dependências, variáveis de ambiente e procedimentos de ins
 | Ferramenta | Versão mínima | Uso |
 | --- | --- | --- |
 | Docker + Docker Compose | 24.x / v2 | Orquestração local via `docker-compose.yml` (RabbitMQ, order-service, scheduler-agent). |
-| Java JDK | 17 | Build do `services/api/order-service` com Maven. |
+| Java JDK | 25 | Build do `services/api/order-service` com Maven. |
 | Maven | 3.9 | Execução de testes/build Spring Boot. |
 | Python | 3.11 | Execução standalone do `services/workers/scheduler-agent` e notebooks de `ml/llm`. |
 | Node.js + npm | 18 / 9 | Testes BDD (`tests/bdd`). |

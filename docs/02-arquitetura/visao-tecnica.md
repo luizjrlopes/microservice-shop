@@ -6,7 +6,7 @@
 
 | Componente | Linguagem | Framework / libs | Comunicação |
 |---|---|---|---|
-| `order-service` | Java 17 | Spring Boot 3, Spring AMQP, Spring Data JPA, Flyway | HTTP + SQL + AMQP |
+| `order-service` | Java 25 | Spring Boot 3, Spring AMQP, Spring Data JPA, Flyway | HTTP + SQL + AMQP |
 | PostgreSQL | — | PostgreSQL 16 | SQL |
 | `scheduler-agent` | Python 3.11 | pika, requests, prometheus-client | AMQP + HTTP |
 | `tests/bdd` | TypeScript | Cucumber, Axios, amqplib | HTTP + AMQP |

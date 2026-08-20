@@ -26,7 +26,7 @@
 
 | Pasta | Componente | Linguagem |
 |-------|-----------|-----------|
-| `services/api/order-service` | API HTTP + publisher AMQP | Java 17 + Spring Boot |
+| `services/api/order-service` | API HTTP + publisher AMQP | Java 25 + Spring Boot |
 | `services/workers/scheduler-agent` | Worker AMQP consumer | Python 3.11 |
 | `tests/bdd` | Testes BDD E2E | TypeScript + Cucumber |
 | `ml/experiments/demand-forecasting` | Modelo de previsão de demanda | Python + ML |

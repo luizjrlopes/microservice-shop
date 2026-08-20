@@ -1,6 +1,6 @@
 # Checklist de Construção — microservice-shop
 
-**Stack:** Java 17 + Spring Boot / Python 3.11 / RabbitMQ / Node.js + Cucumber  
+**Stack:** Java 25 + Spring Boot / Python 3.11 / RabbitMQ / Node.js + Cucumber
 **Status:** ✅ MVP completo  
 **Última atualização:** 2026-06-22
 

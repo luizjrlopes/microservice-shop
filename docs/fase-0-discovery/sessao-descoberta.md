@@ -19,7 +19,7 @@ Demonstrar, num repositório coeso e bem documentado, que o candidato sabe const
 
 ## Stack decidida
 
-- order-service: Java 17 + Spring Boot + AMQP (RabbitMQ client)
+- order-service: Java 25 + Spring Boot + AMQP (RabbitMQ client)
 - scheduler-agent: Python 3.11 + pika (AMQP) + requests
 - Testes BDD: Node.js 18 + Cucumber + TypeScript
 - Experimentos ML: Python + scikit-learn / LangChain

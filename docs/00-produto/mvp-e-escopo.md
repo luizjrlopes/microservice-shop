@@ -6,7 +6,7 @@ Este documento separa **implementado**, **em evolução** e **fora do núcleo at
 
 | Capacidade | Estado |
 |---|---|
-| `order-service` em Java 17 + Spring Boot | ✅ |
+| `order-service` em Java 25 + Spring Boot | ✅ |
 | `POST /orders` | ✅ |
 | `GET /orders/{id}` | ✅ |
 | `POST /orders/{id}/confirm` | ✅ |

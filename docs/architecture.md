@@ -23,7 +23,7 @@ flowchart LR
 
 | Componente | Tecnologia | Responsabilidade implementada |
 |---|---|---|
-| `order-service` | Java 17 + Spring Boot | cria, consulta e confirma pedidos; persiste Outbox; publica eventos pendentes |
+| `order-service` | Java 25 + Spring Boot | cria, consulta e confirma pedidos; persiste Outbox; publica eventos pendentes |
 | PostgreSQL | PostgreSQL 16 | persiste pedidos e `outbox_events` |
 | Flyway | Flyway | versiona schemas de pedidos e Outbox |
 | RabbitMQ | AMQP | transporta `order.created.v1`, retry e DLQ |
