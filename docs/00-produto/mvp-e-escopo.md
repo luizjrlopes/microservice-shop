@@ -4,26 +4,26 @@ Este documento separa **implementado**, **em evolução** e **fora do núcleo at
 
 ## Implementado
 
-| Capacidade | Estado |
-|---|---|
-| `order-service` em Java 17 + Spring Boot | ✅ |
-| `POST /orders` | ✅ |
-| `GET /orders/{id}` | ✅ |
-| `POST /orders/{id}/confirm` | ✅ |
-| domínio com invariantes e `OrderStatus` | ✅ |
-| confirmação repetida segura | ✅ |
-| PostgreSQL como persistência | ✅ |
-| migrações Flyway | ✅ |
-| port de repositório na camada de aplicação | ✅ |
-| adapter JPA/PostgreSQL | ✅ |
-| publicação do evento legado `order.created` | ✅ |
-| `scheduler-agent` Python | ✅ |
-| Docker Compose com PostgreSQL + RabbitMQ + serviços | ✅ |
-| testes unitários Java e Python | ✅ |
-| teste PostgreSQL via Testcontainers | ✅ |
-| BDD Cucumber | ✅ |
-| contratos `order.created.v1` em `contracts/` | ✅ como contrato-alvo |
-| experimentos ML clássicos | ✅ experimental |
+| Capacidade                                          | Estado                |
+| --------------------------------------------------- | --------------------- |
+| `order-service` em Java 25 + Spring Boot            | ✅                    |
+| `POST /orders`                                      | ✅                    |
+| `GET /orders/{id}`                                  | ✅                    |
+| `POST /orders/{id}/confirm`                         | ✅                    |
+| domínio com invariantes e `OrderStatus`             | ✅                    |
+| confirmação repetida segura                         | ✅                    |
+| PostgreSQL como persistência                        | ✅                    |
+| migrações Flyway                                    | ✅                    |
+| port de repositório na camada de aplicação          | ✅                    |
+| adapter JPA/PostgreSQL                              | ✅                    |
+| publicação do evento legado `order.created`         | ✅                    |
+| `scheduler-agent` Python                            | ✅                    |
+| Docker Compose com PostgreSQL + RabbitMQ + serviços | ✅                    |
+| testes unitários Java e Python                      | ✅                    |
+| teste PostgreSQL via Testcontainers                 | ✅                    |
+| BDD Cucumber                                        | ✅                    |
+| contratos `order.created.v1` em `contracts/`        | ✅ como contrato-alvo |
+| experimentos ML clássicos                           | ✅ experimental       |
 
 ## Limitações conhecidas
 

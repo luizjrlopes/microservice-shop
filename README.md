@@ -6,7 +6,7 @@ O projeto concentra complexidade onde ela importa: consistência entre banco e m
 
 ## O que está implementado
 
-- `order-service` em Java 17 + Spring Boot;
+- `order-service` em Java 25 + Spring Boot;
 - PostgreSQL com Spring Data JPA e migrações Flyway;
 - criação, consulta e confirmação idempotente de pedidos via HTTP;
 - **Transactional Outbox**: pedido e evento são persistidos na mesma transação;
@@ -46,18 +46,18 @@ No consumidor, falhas transitórias não geram ACK prematuro. A mensagem é enca
 
 ## Stack
 
-| Área | Tecnologia |
-|---|---|
-| API | Java 17, Spring Boot 3, Spring AMQP, Spring Data JPA |
-| Persistência | PostgreSQL 16, Flyway |
-| Mensageria | RabbitMQ, topic exchange, publisher confirms |
-| Worker | Python 3.11, pika, requests, prometheus-client |
-| Contratos | AsyncAPI + JSON Schema |
-| Testes | JUnit, Mockito, Testcontainers, Pytest, Cucumber |
+| Área            | Tecnologia                                                 |
+| --------------- | ---------------------------------------------------------- |
+| API             | Java 25, Spring Boot 3, Spring AMQP, Spring Data JPA       |
+| Persistência    | PostgreSQL 16, Flyway                                      |
+| Mensageria      | RabbitMQ, topic exchange, publisher confirms               |
+| Worker          | Python 3.11, pika, requests, prometheus-client             |
+| Contratos       | AsyncAPI + JSON Schema                                     |
+| Testes          | JUnit, Mockito, Testcontainers, Pytest, Cucumber           |
 | Observabilidade | Spring Actuator, Micrometer/Prometheus, métricas do worker |
-| Execução local | Docker Compose |
-| Automação | Makefile, GitHub Actions |
-| ML experimental | Python, pandas, scikit-learn |
+| Execução local  | Docker Compose                                             |
+| Automação       | Makefile, GitHub Actions                                   |
+| ML experimental | Python, pandas, scikit-learn                               |
 
 ## Propriedades demonstradas
 

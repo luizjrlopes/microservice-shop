@@ -6,7 +6,7 @@
 
 **Produto:** microservice-shop — Monorepo de plataforma de pedidos que demonstra padrões de microsserviços: mensageria assíncrona (RabbitMQ), automação com worker, testes BDD e trilhas de experimentação com IA/LLM.  
 **Público:** Portfólio/estudo do desenvolvedor — demonstra múltiplos padrões em um único repositório  
-**Stack:** Java 17 + Spring Boot (order-service), Python 3.11 (scheduler-agent), Node.js 18 + Cucumber (BDD), RabbitMQ, Docker Compose
+**Stack:** Java 25 + Spring Boot (order-service), Python 3.11 (scheduler-agent), Node.js 18 + Cucumber (BDD), RabbitMQ, Docker Compose
 
 ## Estado atual
 
@@ -38,12 +38,12 @@
 
 ## Onde estão as coisas
 
-| O que | Onde |
-|-------|------|
-| Serviço de pedidos (Java) | `services/api/order-service/` |
+| O que                          | Onde                                |
+| ------------------------------ | ----------------------------------- |
+| Serviço de pedidos (Java)      | `services/api/order-service/`       |
 | Worker de confirmação (Python) | `services/workers/scheduler-agent/` |
-| Testes BDD | `tests/bdd/` |
-| Experimentos ML/LLM | `ml/` |
-| Documentação de arquitetura | `docs/architecture.md` |
-| Variáveis de ambiente | `docs/setup.md` + esta doc |
-| Roadmap | `ROADMAP.md` |
+| Testes BDD                     | `tests/bdd/`                        |
+| Experimentos ML/LLM            | `ml/`                               |
+| Documentação de arquitetura    | `docs/architecture.md`              |
+| Variáveis de ambiente          | `docs/setup.md` + esta doc          |
+| Roadmap                        | `ROADMAP.md`                        |
