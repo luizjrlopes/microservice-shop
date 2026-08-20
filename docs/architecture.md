@@ -7,13 +7,13 @@
 ```mermaid
 flowchart LR
     Client((Cliente REST)) -->|POST /orders| API[order-service\nSpring Boot]
-    Client -->|GET /orders/{id}| API
+    Client -->|GET /orders/:id| API
     API -->|transação JPA| DB[(PostgreSQL\norders + outbox_events)]
     PUB[Outbox Publisher] -->|lê pendentes| DB
     PUB -->|order.created.v1| EX{{orders.events\nRabbitMQ}}
     EX --> Q[scheduler.order-created.v1]
     Q --> Worker[scheduler-agent\nPython]
-    Worker -->|POST /orders/{id}/confirm| API
+    Worker -->|POST /orders/:id/confirm| API
     Worker --> Retry[scheduler retry queue]
     Retry -->|TTL + dead letter| EX
     Worker --> DLQ[scheduler DLQ]

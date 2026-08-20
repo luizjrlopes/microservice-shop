@@ -52,7 +52,7 @@ flowchart LR
     P -->|order.created.v1| EX{{orders.events}}
     EX --> Q[scheduler.order-created.v1]
     Q --> W[scheduler-agent]
-    W -->|POST /orders/{id}/confirm| API
+    W -->|POST /orders/:id/confirm| API
     W --> R[retry queue]
     R -->|TTL| EX
     W --> D[DLQ]

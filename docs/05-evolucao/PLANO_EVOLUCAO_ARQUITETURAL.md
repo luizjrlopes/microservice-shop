@@ -289,13 +289,13 @@ flowchart LR
 
     EX -->|order.created.v1| Q[scheduler.order-created.v1]
     Q --> W[scheduler-agent\nPython]
-    W -->|POST /orders/{id}/confirm| API
+    W -->|POST /orders/:id/confirm| API
 
     W -->|transient failure| R[scheduler.order-created.retry.v1]
     R -->|delay/TTL| Q
     W -->|invalid or exhausted| D[scheduler.order-created.dlq.v1]
 
-    C -->|GET /orders/{id}| API
+    C -->|GET /orders/:id| API
 ```
 
 ### Propriedade principal

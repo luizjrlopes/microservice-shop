@@ -36,8 +36,8 @@ flowchart LR
     W -->|falha transitória| R[scheduler retry queue]
     R -->|TTL + dead letter| EX
     W -->|retries esgotados / inválido| D[DLQ]
-    W -->|POST /orders/{id}/confirm| API
-    C -->|GET /orders/{id}| API
+    W -->|POST /orders/:id/confirm| API
+    C -->|GET /orders/:id| API
 ```
 
 A criação de um pedido não depende de o broker estar disponível para preservar o evento: o estado do pedido e o registro do Outbox são gravados atomicamente no PostgreSQL. O publisher processa registros pendentes e só os marca como publicados após confirmação do RabbitMQ.
