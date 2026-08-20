@@ -1,104 +1,139 @@
 # Arquitetura Atual — Microservice Shop
 
-> Este documento descreve **somente o que está implementado nesta versão**. A arquitetura-alvo está em [`05-evolucao/PLANO_EVOLUCAO_ARQUITETURAL.md`](05-evolucao/PLANO_EVOLUCAO_ARQUITETURAL.md).
+> Este documento descreve **somente o que está implementado nesta versão**. Evoluções futuras permanecem em [`05-evolucao/PLANO_EVOLUCAO_ARQUITETURAL.md`](05-evolucao/PLANO_EVOLUCAO_ARQUITETURAL.md) e no [`ROADMAP.md`](../ROADMAP.md).
 
 ## Visão em alto nível
 
 ```mermaid
 flowchart LR
-    Client((Cliente REST)) -->|POST /orders| OrderService
-    Client -->|GET /orders/{id}| OrderService
-    OrderService[order-service\nSpring Boot] -->|JPA| PostgreSQL[(PostgreSQL)]
-    OrderService -->|order.created| RabbitMQ[(RabbitMQ)]
-    RabbitMQ --> Scheduler[scheduler-agent\nPython]
-    Scheduler -->|POST /orders/{id}/confirm| OrderService
+    Client((Cliente REST)) -->|POST /orders| API[order-service\nSpring Boot]
+    Client -->|GET /orders/{id}| API
+    API -->|transação JPA| DB[(PostgreSQL\norders + outbox_events)]
+    PUB[Outbox Publisher] -->|lê pendentes| DB
+    PUB -->|order.created.v1| EX{{orders.events\nRabbitMQ}}
+    EX --> Q[scheduler.order-created.v1]
+    Q --> Worker[scheduler-agent\nPython]
+    Worker -->|POST /orders/{id}/confirm| API
+    Worker --> Retry[scheduler retry queue]
+    Retry -->|TTL + dead letter| EX
+    Worker --> DLQ[scheduler DLQ]
 ```
 
 ## Componentes
 
-| Componente | Tecnologia | Responsabilidade atual |
+| Componente | Tecnologia | Responsabilidade implementada |
 |---|---|---|
-| `order-service` | Java 17 + Spring Boot | cria, consulta e confirma pedidos; publica `order.created` |
-| PostgreSQL | PostgreSQL 16 | persiste pedidos |
-| Flyway | Flyway | versiona o schema de dados |
-| RabbitMQ | AMQP | transporta eventos entre produtor e consumidor |
-| `scheduler-agent` | Python 3.11 + pika + requests | consome evento e chama a confirmação HTTP |
-| `tests/bdd` | TypeScript + Cucumber | exercita API e RabbitMQ |
+| `order-service` | Java 17 + Spring Boot | cria, consulta e confirma pedidos; persiste Outbox; publica eventos pendentes |
+| PostgreSQL | PostgreSQL 16 | persiste pedidos e `outbox_events` |
+| Flyway | Flyway | versiona schemas de pedidos e Outbox |
+| RabbitMQ | AMQP | transporta `order.created.v1`, retry e DLQ |
+| `scheduler-agent` | Python 3.11 + pika + requests | consome evento, confirma pedido e aplica política de retry/DLQ |
+| Prometheus | profile Compose opcional | coleta métricas do serviço e do worker |
+| `tests/bdd` | TypeScript + Cucumber | prova fluxo HTTP + AMQP distribuído |
 
-## Contratos HTTP atuais
+## Contratos HTTP
 
 | Método | Rota | Comportamento |
 |---|---|---|
-| `POST` | `/orders` | cria pedido `PENDING` e retorna `201` com o ID |
-| `GET` | `/orders/{id}` | retorna o estado persistido do pedido |
-| `POST` | `/orders/{id}/confirm` | confirma o pedido e retorna `200` |
+| `POST` | `/orders` | cria pedido `PENDING` e retorna `201` |
+| `GET` | `/orders/{id}` | retorna o estado persistido |
+| `POST` | `/orders/{id}/confirm` | confirma o pedido; repetição segura |
 
-Entradas inválidas de criação retornam `400`; pedido inexistente retorna `404`.
+Entradas inválidas retornam `400`; pedido inexistente retorna `404`.
 
-## Domínio
+## Consistência transacional
 
-`Order` agora possui:
+A criação executa pedido + evento como uma única unidade transacional:
 
-- ID UUID;
-- `productId` obrigatório;
-- `quantity > 0`;
-- `OrderStatus` explícito (`PENDING`, `CONFIRMED`);
-- timestamps de criação/atualização;
-- confirmação repetida segura.
+```text
+BEGIN
+  INSERT orders
+  INSERT outbox_events(order.created.v1)
+COMMIT
+```
 
-O contrato `OrderRepository` é um port da camada de aplicação. A implementação PostgreSQL fica em `infrastructure/persistence`.
+O `PublishPendingOutboxEventsService` consulta eventos pendentes em lotes. `RabbitOutboxEventPublisher` publica no exchange `orders.events` usando routing key `order.created.v1`, mensagem persistente e publisher confirm. O registro só recebe `published_at` após ACK do broker; falhas incrementam o estado de tentativa e mantêm o evento pendente.
 
-## Persistência
+Isso remove a antiga janela de dual write `commit PostgreSQL -> publish RabbitMQ` do caso de uso de criação.
 
-A persistência usa Spring Data JPA sobre PostgreSQL. O schema é criado por `V1__create_orders.sql` e o Hibernate opera em modo `validate`, evitando criação implícita de tabelas.
-
-O adapter de persistência possui teste contra PostgreSQL real via Testcontainers.
-
-## Contrato AMQP atual
-
-O runtime ainda publica o contrato legado:
+## Contrato AMQP
 
 | Item | Valor |
 |---|---|
-| Exchange | `order.exchange` |
-| Routing key | `order.created` |
-| Fila | `order.created` |
-| Payload | `{ id, productId, quantity, status }` |
+| Exchange | `orders.events` |
+| Tipo | `topic` |
+| Routing key | `order.created.v1` |
+| Fila do scheduler | `scheduler.order-created.v1` |
+| Retry queue | `scheduler.order-created.retry.v1` |
+| DLQ | `scheduler.order-created.dlq.v1` |
+| Contrato | `contracts/events/order-created-v1.schema.json` + `contracts/asyncapi.yaml` |
 
-O contrato `order.created.v1` já está definido em `contracts/`, mas sua adoção no runtime pertence à PR de Transactional Outbox.
+O envelope contém `eventId`, `eventType`, `eventVersion`, `correlationId` e `payload`. O publisher também propaga IDs relevantes em propriedades AMQP.
 
-## Limitação estrutural atual
+## Semântica do consumidor
 
-Persistir o pedido e publicar no RabbitMQ continuam sendo duas operações separadas:
+O `scheduler-agent` opera com `auto_ack=False` e prefetch limitado. O fluxo é:
 
 ```text
-PostgreSQL commit
-      ↓
-RabbitMQ publish
+mensagem válida
+  -> POST /orders/{id}/confirm com timeout
+  -> sucesso: ACK
+  -> falha transitória: publica em retry queue + ACK original
+  -> retry queue expira por TTL e retorna ao exchange
+  -> retries esgotados: publica em DLQ + ACK original
+  -> evento inválido: DLQ + ACK original
+
+se publicar retry/DLQ falhar
+  -> NACK requeue da mensagem original
 ```
 
-Essa janela de dual write é conhecida e será removida pela Transactional Outbox na próxima etapa.
+A confirmação de domínio é idempotente, reduzindo o risco de efeitos incorretos em reentregas at-least-once.
 
-O worker também ainda mantém a semântica de entrega antiga; timeout, ACK correto, retry e DLQ pertencem à etapa seguinte.
+## Persistência
+
+- `V1__create_orders.sql` cria a estrutura de pedidos;
+- `V2__create_outbox_events.sql` cria o Outbox;
+- Hibernate opera com schema validado;
+- integração transacional usa PostgreSQL real via Testcontainers.
+
+## Observabilidade implementada
+
+- Spring Actuator/Micrometer expõe métricas do `order-service`;
+- `scheduler-agent` expõe contadores de processamento, retry e DLQ e histograma de latência de confirmação;
+- o worker emite logs JSON com `eventId`, `correlationId` e `orderId` nas transições principais;
+- `infra/observability/prometheus.yml` coleta os dois endpoints quando o profile `observability` é ativado.
+
+A correlação ponta a ponta completa e a instrumentação OpenTelemetry continuam como evolução futura.
+
+## Testes e gates
+
+O repositório possui:
+
+- testes Java de domínio, aplicação, adapters e Outbox;
+- integração PostgreSQL via Testcontainers;
+- testes Python de ACK, retry, DLQ, evento inválido e falha ao republicar;
+- BDD distribuído com fila exclusiva de auditoria;
+- CI separado em `quality`, `unit-tests`, `security` e `integration-e2e`;
+- coleta de estado/logs dos containers quando o E2E falha.
 
 ## Execução local
 
-O Docker Compose contém:
+O Docker Compose contém PostgreSQL, RabbitMQ, `order-service` e `scheduler-agent`. O profile opcional `observability` adiciona Prometheus.
 
-- PostgreSQL;
-- RabbitMQ com credencial local explícita;
-- `order-service`;
-- `scheduler-agent`.
-
-O `order-service` espera PostgreSQL e RabbitMQ saudáveis antes de iniciar o fluxo.
+```bash
+docker compose up -d --build
+make compose-observability
+```
 
 ## Próximas mudanças
 
-A próxima evolução adiciona:
+O core de confiabilidade já está materializado. Os próximos ganhos estão em **prova e operação**, não em adicionar serviços por quantidade:
 
-- tabela `outbox_events`;
-- persistência atômica de pedido + evento;
-- publisher de Outbox;
-- adoção runtime de `order.created.v1`.
+1. integração dedicada RabbitMQ + Outbox;
+2. auditoria de dependências mais abrangente;
+3. correlação/logging consistente no `order-service`;
+4. métricas de domínio e Outbox;
+5. dashboards/alertas e troubleshooting orientado a sinais;
+6. OpenTelemetry, se continuar agregando evidência operacional.
 
-Depois disso entram semântica at-least-once, retry/DLQ, E2E distribuído e observabilidade.
+Depois do gate de observabilidade, o projeto pode escolher uma única frente de diferenciação: Cloud/IaC executável ou integração real de uma capacidade de ML.
