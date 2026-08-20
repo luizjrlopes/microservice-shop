@@ -1,81 +1,74 @@
 # Microservice Shop
 
-**Microservice Shop** é uma plataforma de processamento de pedidos orientada a eventos, construída para explorar problemas reais de sistemas distribuídos em uma stack poliglota Java/Python.
+**Microservice Shop** é uma plataforma de processamento de pedidos orientada a eventos, construída para demonstrar propriedades reais de sistemas distribuídos em uma stack poliglota Java/Python.
 
-O fluxo principal combina uma API Spring Boot, PostgreSQL, RabbitMQ e um worker Python para processar pedidos de forma assíncrona. A evolução arquitetural do projeto está concentrada em confiabilidade: consistência entre estado e evento, processamento idempotente, recuperação de falhas, contratos versionados e observabilidade.
+O projeto concentra complexidade onde ela importa: consistência entre banco e mensageria, entrega at-least-once, recuperação de falhas, contratos versionados, idempotência, testes distribuídos e observabilidade operacional.
 
-## Estado atual
-
-Hoje o repositório implementa:
+## O que está implementado
 
 - `order-service` em Java 17 + Spring Boot;
-- persistência PostgreSQL com Spring Data JPA;
-- migrações versionadas com Flyway;
-- criação, consulta e confirmação de pedidos via HTTP;
-- domínio com invariantes e `OrderStatus` explícito;
-- publicação do evento legado `order.created` em RabbitMQ;
-- `scheduler-agent` em Python consumindo eventos e acionando a confirmação;
-- Docker Compose para PostgreSQL, RabbitMQ e serviços;
-- testes unitários em Java e Python;
-- teste de persistência PostgreSQL via Testcontainers;
-- suíte BDD em TypeScript/Cucumber;
-- ADRs e documentação arquitetural;
-- experimentos executáveis de ML clássico para previsão de demanda e detecção de anomalias.
+- PostgreSQL com Spring Data JPA e migrações Flyway;
+- criação, consulta e confirmação idempotente de pedidos via HTTP;
+- **Transactional Outbox**: pedido e evento são persistidos na mesma transação;
+- publisher assíncrono do Outbox com publisher confirms do RabbitMQ;
+- contrato versionado `order.created.v1` descrito em JSON Schema + AsyncAPI;
+- `scheduler-agent` em Python com consumo manual, timeout HTTP e ACK controlado;
+- retry com atraso e contagem preservada em headers;
+- Dead Letter Queue para eventos inválidos ou retries esgotados;
+- propagação de `eventId` e `correlationId` no fluxo assíncrono;
+- métricas Prometheus no serviço Java e no worker Python;
+- logs estruturados no worker;
+- Docker Compose para PostgreSQL, RabbitMQ, API, worker e profile opcional de observabilidade;
+- testes Java/Python, integração PostgreSQL via Testcontainers e BDD distribuído em TypeScript/Cucumber;
+- gates de CI separados para qualidade, testes, segurança e fluxo E2E;
+- ADRs, contratos e documentação arquitetural versionados.
 
-O repositório **ainda não possui** Transactional Outbox no runtime, `order.created.v1` publicado pelo serviço, retry/DLQ completos, observabilidade distribuída ou uma feature LLM integrada. Esses itens aparecem apenas quando fazem parte do plano de evolução e não são apresentados como capacidades concluídas.
-
-## Arquitetura atual
+## Arquitetura executável
 
 ```mermaid
 flowchart LR
-    C[Client] -->|POST /orders| API[order-service\nJava + Spring Boot]
-    API -->|JPA| DB[(PostgreSQL)]
-    API -->|order.created| MQ{{RabbitMQ}}
-    MQ --> W[scheduler-agent\nPython]
+    C[Client] -->|POST /orders| API[order-service\nSpring Boot]
+    API -->|transação| DB[(PostgreSQL\norders + outbox_events)]
+    PUB[Outbox Publisher] -->|lê pendentes| DB
+    PUB -->|order.created.v1| EX{{orders.events\nRabbitMQ}}
+    EX --> Q[scheduler.order-created.v1]
+    Q --> W[scheduler-agent\nPython]
+    W -->|falha transitória| R[scheduler retry queue]
+    R -->|TTL + dead letter| EX
+    W -->|retries esgotados / inválido| D[DLQ]
     W -->|POST /orders/{id}/confirm| API
     C -->|GET /orders/{id}| API
 ```
 
-### Stack
+A criação de um pedido não depende de o broker estar disponível para preservar o evento: o estado do pedido e o registro do Outbox são gravados atomicamente no PostgreSQL. O publisher processa registros pendentes e só os marca como publicados após confirmação do RabbitMQ.
+
+No consumidor, falhas transitórias não geram ACK prematuro. A mensagem é encaminhada para uma fila de retry com atraso; após o limite configurado, segue para DLQ. Se a própria publicação de retry/DLQ falhar, a entrega original é reencaminhada pelo broker em vez de ser silenciosamente descartada.
+
+## Stack
 
 | Área | Tecnologia |
 |---|---|
-| API | Java 17, Spring Boot, Spring AMQP, Spring Data JPA |
-| Persistência | PostgreSQL, Flyway |
-| Worker | Python 3.11, pika, requests |
-| Mensageria | RabbitMQ |
+| API | Java 17, Spring Boot 3, Spring AMQP, Spring Data JPA |
+| Persistência | PostgreSQL 16, Flyway |
+| Mensageria | RabbitMQ, topic exchange, publisher confirms |
+| Worker | Python 3.11, pika, requests, prometheus-client |
+| Contratos | AsyncAPI + JSON Schema |
 | Testes | JUnit, Mockito, Testcontainers, Pytest, Cucumber |
+| Observabilidade | Spring Actuator, Micrometer/Prometheus, métricas do worker |
 | Execução local | Docker Compose |
-| ML experimental | Python, pandas, scikit-learn |
 | Automação | Makefile, GitHub Actions |
+| ML experimental | Python, pandas, scikit-learn |
 
-## Por que este projeto existe
+## Propriedades demonstradas
 
-O projeto não tenta maximizar a quantidade de serviços. O objetivo é aprofundar um fluxo distribuído pequeno o suficiente para ser compreendido por inteiro e complexo o suficiente para discutir propriedades que importam em produção:
+O objetivo do repositório não é aumentar artificialmente a quantidade de microserviços. O fluxo foi mantido pequeno para que as propriedades distribuídas possam ser verificadas de ponta a ponta:
 
-- o que acontece quando uma chamada HTTP falha depois de uma mensagem ser entregue;
-- como evitar perda silenciosa de eventos;
-- como lidar com reentrega e efeitos duplicados;
-- como garantir consistência entre persistência e publicação;
-- como observar um pedido atravessando processos diferentes;
-- como provar essas propriedades com testes automatizados.
-
-## Evolução arquitetural
-
-O próximo salto estrutural é remover o dual write entre PostgreSQL e RabbitMQ:
-
-```text
-Client
-  -> order-service
-      -> PostgreSQL
-          -> Transactional Outbox
-              -> RabbitMQ
-                  -> scheduler-agent
-                      -> retry / DLQ
-                      -> confirmação idempotente
-```
-
-A estratégia completa está em [`docs/05-evolucao/PLANO_EVOLUCAO_ARQUITETURAL.md`](docs/05-evolucao/PLANO_EVOLUCAO_ARQUITETURAL.md).
+- **consistência estado + evento:** Transactional Outbox remove o dual write entre PostgreSQL e RabbitMQ;
+- **contrato explícito:** `order.created.v1` possui envelope e schema versionados;
+- **entrega resiliente:** ACK manual, timeout, retry com atraso e DLQ;
+- **idempotência de negócio:** confirmar novamente um pedido já confirmado não cria uma transição inválida;
+- **falha observável:** retries, DLQ e latência de confirmação possuem métricas;
+- **prova automatizada:** testes de integração e BDD exercitam persistência e fluxo distribuído real.
 
 ## Executando localmente
 
@@ -97,27 +90,23 @@ Serviços principais:
 - PostgreSQL: `localhost:5432`;
 - RabbitMQ Management: `http://localhost:15672`.
 
-As credenciais locais de PostgreSQL e RabbitMQ são `microservice_shop` / `microservice_shop` e servem apenas ao ambiente Compose de desenvolvimento.
+As credenciais `microservice_shop` / `microservice_shop` existem apenas no ambiente Compose de desenvolvimento.
 
-### Criar um pedido
+### Criar e acompanhar um pedido
 
 ```bash
 curl -X POST http://localhost:8080/orders \
   -H "Content-Type: application/json" \
   -d '{"productId":"SKU-1","quantity":2}'
-```
 
-### Consultar o estado
-
-```bash
 curl http://localhost:8080/orders/<order-id>
 ```
 
-O pedido é persistido como `PENDING`, um evento é publicado no RabbitMQ e o worker tenta confirmá-lo de forma assíncrona.
+O pedido nasce como `PENDING`; o Outbox publica `order.created.v1`; o `scheduler-agent` processa o evento e confirma o pedido de forma assíncrona.
 
 ## Qualidade e testes
 
-O `Makefile` centraliza as rotinas principais:
+O `Makefile` concentra a mesma superfície usada no CI:
 
 ```bash
 make lint
@@ -126,27 +115,30 @@ make security
 make bdd-test
 ```
 
-A persistência também possui teste contra PostgreSQL real usando Testcontainers. A suíte BDD ainda não é o gate distribuído final porque o desenho atual do consumidor será redesenhado nas próximas PRs.
+A suíte inclui testes de domínio e aplicação, persistência real com PostgreSQL/Testcontainers, políticas de retry/DLQ do worker e cenários Cucumber contra a stack distribuída.
+
+## Observabilidade
+
+Para subir também o Prometheus:
+
+```bash
+make compose-observability
+```
+
+O Prometheus coleta métricas do `order-service` em `/actuator/prometheus` e do `scheduler-agent` na porta `9100`.
 
 ## ML e IA
 
-O repositório possui duas trilhas de ML clássico executáveis:
-
-- `ml/experiments/demand-forecasting`;
-- `ml/experiments/order-anomaly-detection`.
-
-A área `ml/llm` é experimental e ainda não representa uma feature LLM integrada ao produto.
+Os experimentos de ML permanecem deliberadamente desacoplados do fluxo transacional principal. Há trilhas executáveis de previsão de demanda e detecção de anomalias; `ml/llm` continua experimental e não é apresentada como feature integrada.
 
 ## Documentação
 
-As fontes principais são:
-
-- [`docs/00-produto/`](docs/00-produto/) — visão e escopo;
-- [`docs/architecture.md`](docs/architecture.md) — arquitetura atual;
+- [`docs/architecture.md`](docs/architecture.md) — arquitetura implementada;
 - [`docs/02-arquitetura/visao-tecnica.md`](docs/02-arquitetura/visao-tecnica.md) — visão técnica detalhada;
 - [`docs/02-arquitetura/decisoes/`](docs/02-arquitetura/decisoes/) — ADRs;
+- [`contracts/`](contracts/) — contratos de evento;
 - [`docs/04-operacao/`](docs/04-operacao/) — operação;
-- [`docs/05-evolucao/`](docs/05-evolucao/) — auditoria e plano arquitetural vigente;
-- [`ROADMAP.md`](ROADMAP.md) — sequência de evolução.
+- [`docs/05-evolucao/`](docs/05-evolucao/) — evolução arquitetural;
+- [`ROADMAP.md`](ROADMAP.md) — estado das ondas e próximos gates.
 
-Documentos históricos continuam no repositório quando úteis para rastreabilidade, mas não devem ser tratados como fonte canônica do estado atual.
+Documentos históricos são mantidos para rastreabilidade, mas o estado implementado é determinado pelo código, testes, contratos executáveis e documentação atual.
