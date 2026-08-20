@@ -1,19 +1,20 @@
 # Visão Técnica — Microservice Shop
 
-> **Escopo deste documento:** arquitetura atualmente implementada. A evolução futura está em [`../05-evolucao/PLANO_EVOLUCAO_ARQUITETURAL.md`](../05-evolucao/PLANO_EVOLUCAO_ARQUITETURAL.md).
+> **Escopo:** arquitetura atualmente implementada. O estado futuro fica no [`../05-evolucao/PLANO_EVOLUCAO_ARQUITETURAL.md`](../05-evolucao/PLANO_EVOLUCAO_ARQUITETURAL.md) e no [`../../ROADMAP.md`](../../ROADMAP.md).
 
 ## Stack atual
 
 | Componente | Linguagem | Framework / libs | Comunicação |
 |---|---|---|---|
-| `order-service` | Java 17 | Spring Boot 3, Spring AMQP, Spring Data JPA | HTTP + SQL + AMQP |
-| PostgreSQL | — | PostgreSQL 16 + Flyway | SQL |
-| `scheduler-agent` | Python 3.11 | pika, requests | AMQP + HTTP |
+| `order-service` | Java 17 | Spring Boot 3, Spring AMQP, Spring Data JPA, Flyway | HTTP + SQL + AMQP |
+| PostgreSQL | — | PostgreSQL 16 | SQL |
+| `scheduler-agent` | Python 3.11 | pika, requests, prometheus-client | AMQP + HTTP |
 | `tests/bdd` | TypeScript | Cucumber, Axios, amqplib | HTTP + AMQP |
+| Prometheus | — | Prometheus | HTTP scrape |
 | `ml/experiments` | Python | pandas, scikit-learn | scripts standalone |
 | RabbitMQ | — | RabbitMQ | AMQP |
 
-A área `ml/llm` contém dependências e documentação experimental, mas não possui atualmente uma feature LLM integrada ao sistema.
+`ml/llm` continua experimental; não representa uma feature integrada ao runtime.
 
 ## Estrutura principal
 
@@ -24,16 +25,18 @@ microservice-shop/
 │   │   └── src/main/java/com/shop/order/
 │   │       ├── domain/
 │   │       ├── application/
+│   │       │   ├── events/
+│   │       │   ├── outbox/
 │   │       │   └── ports/
 │   │       ├── infrastructure/
-│   │       │   └── persistence/
+│   │       │   ├── persistence/
+│   │       │   └── outbox/
 │   │       └── interfaces/
 │   └── workers/scheduler-agent/
 ├── contracts/
 ├── tests/bdd/
-├── ml/experiments/
-├── ml/llm/
-├── infra/terraform/
+├── infra/observability/
+├── ml/
 ├── docs/
 ├── docker-compose.yml
 └── Makefile
@@ -43,27 +46,33 @@ microservice-shop/
 
 ```mermaid
 flowchart LR
-    Client[Cliente] -->|POST /orders| API[order-service]
-    Client -->|GET /orders/{id}| API
-    API -->|JPA| DB[(PostgreSQL)]
-    API -->|order.created| EX{{order.exchange}}
-    EX --> Q[order.created]
+    C[Cliente] -->|POST /orders| API[order-service]
+    API -->|TX| DB[(PostgreSQL\norders + outbox_events)]
+    P[Outbox Publisher] -->|pending batch| DB
+    P -->|order.created.v1| EX{{orders.events}}
+    EX --> Q[scheduler.order-created.v1]
     Q --> W[scheduler-agent]
     W -->|POST /orders/{id}/confirm| API
+    W --> R[retry queue]
+    R -->|TTL| EX
+    W --> D[DLQ]
 ```
 
-## Organização interna do `order-service`
+## `order-service`
 
-A implementação mantém separação entre:
+A implementação separa:
 
-- `domain/` — entidade `Order`, invariantes e `OrderStatus`;
-- `application/` — casos de uso e ports de saída;
-- `infrastructure/` — adapters JPA/PostgreSQL, configuração AMQP e publisher;
-- `interfaces/` — controller e tratamento HTTP de erros.
+- `domain/` — `Order`, invariantes e `OrderStatus`;
+- `application/` — casos de uso, evento versionado, Outbox e ports;
+- `infrastructure/persistence/` — JPA/PostgreSQL;
+- `infrastructure/outbox/` — persistência e publicação do Outbox;
+- `interfaces/` — controller e contrato HTTP.
 
-`OrderRepository` agora é um port da camada de aplicação. `PostgresOrderRepositoryAdapter` implementa esse contrato em infraestrutura.
+`CreateOrderService` é transacional: salva o pedido e `OrderCreatedEventV1` no Outbox na mesma transação. A publicação não ocorre diretamente no caso de uso.
 
-## Contratos atuais
+`PublishPendingOutboxEventsService` processa eventos pendentes em lote. O adapter RabbitMQ usa publisher confirm; somente após confirmação positiva o registro é marcado como publicado. Em falha, o evento permanece pendente e a tentativa é registrada.
+
+## Contratos
 
 ### HTTP
 
@@ -73,72 +82,76 @@ GET  /orders/{id}
 POST /orders/{id}/confirm
 ```
 
-A criação rejeita `productId` vazio e quantidade não positiva. Pedido inexistente é tratado como `404`.
+A criação rejeita `productId` vazio e quantidade não positiva. Pedido inexistente retorna `404`. A confirmação repetida é segura para reentregas.
 
 ### AMQP
 
-O runtime ainda usa temporariamente o contrato legado:
-
 ```text
-exchange: order.exchange
-routing key: order.created
-queue: order.created
-payload: id + productId + quantity + status
+exchange: orders.events
+routing key: order.created.v1
+scheduler queue: scheduler.order-created.v1
+retry queue: scheduler.order-created.retry.v1
+DLQ: scheduler.order-created.dlq.v1
 ```
 
-O contrato-alvo `order.created.v1` já existe em `contracts/`, mas só será adotado pelo runtime junto com Transactional Outbox.
+O contrato versionado está em:
+
+- `contracts/events/order-created-v1.schema.json`;
+- `contracts/asyncapi.yaml`.
+
+## Semântica at-least-once
+
+O `scheduler-agent`:
+
+1. consome com ACK manual;
+2. valida envelope/tipo/versão e IDs mínimos;
+3. chama a confirmação HTTP com timeout;
+4. dá ACK somente após sucesso ou após encaminhamento seguro para retry/DLQ;
+5. usa uma retry queue com TTL e dead-letter de volta ao exchange;
+6. envia para DLQ eventos inválidos e entregas que ultrapassam o limite;
+7. usa NACK + requeue se não conseguir publicar o retry/DLQ.
+
+As propriedades `message_id`, `correlation_id` e `x-retry-count` preservam identidade e contexto operacional entre tentativas.
 
 ## Persistência
 
-Pedidos são persistidos no PostgreSQL via Spring Data JPA. O schema é versionado por Flyway e validado pelo Hibernate (`ddl-auto=validate`).
+PostgreSQL persiste pedidos e Outbox. Flyway mantém as migrations e o Hibernate valida o schema. Testcontainers comprova o comportamento contra PostgreSQL real, incluindo a persistência atômica usada pelo caso de criação.
 
-Isso garante que os pedidos sobrevivam ao restart do `order-service` e cria a base transacional necessária para o Outbox.
+## Testes
 
-A limitação atual continua sendo o **dual write**:
+A suíte atual cobre:
 
-```text
-commit PostgreSQL
-      ↓
-publish RabbitMQ
-```
+- domínio, aplicação, controller, persistência e Outbox em Java;
+- PostgreSQL real via Testcontainers;
+- comportamento do worker Python em sucesso, retry, DLQ, evento inválido e falha de republicação;
+- BDD HTTP + RabbitMQ com fila de auditoria dedicada;
+- cenário `POST /orders -> order.created.v1 -> scheduler-agent -> CONFIRMED`.
 
-Uma falha entre essas duas operações ainda pode deixar estado e evento inconsistentes. A PR de Transactional Outbox elimina essa janela.
+O pipeline de PR separa qualidade, testes, segurança e E2E distribuído, e preserva logs/estado do Compose como artifacts quando a integração falha.
 
-## Testes atuais
+## Observabilidade
 
-O repositório possui:
+Já existem:
 
-- testes unitários de domínio/casos de uso e controller Java;
-- teste do adapter de persistência contra PostgreSQL real via Testcontainers;
-- testes unitários do worker Python;
-- cenários BDD em Cucumber.
+- Actuator/Micrometer no `order-service`;
+- métricas Prometheus do `scheduler-agent` para processamento, retry, DLQ e latência;
+- logs JSON do worker com IDs de negócio/evento nas transições principais;
+- profile `observability` no Compose com Prometheus coletando API e worker.
 
-A suíte BDD atual ainda observa a fila usada pelo scheduler, por isso será redesenhada antes de virar gate E2E distribuído definitivo.
+Ainda faltam padronização de logs do serviço Java, métricas de Outbox/domínio, correlação ponta a ponta facilmente consultável, dashboards/alertas e eventual tracing distribuído.
 
 ## Infraestrutura
 
-O Docker Compose executa:
-
-- PostgreSQL;
-- RabbitMQ com credencial local explícita;
-- `order-service`;
-- `scheduler-agent`.
-
-`infra/terraform` continua documental e não deve ser apresentado como IaC implementado.
+O Docker Compose é a infraestrutura executável local. `infra/terraform` não deve ser apresentado como implantação real enquanto permanecer apenas documental/experimental.
 
 ## Próximas etapas
 
 ```text
-Transactional Outbox
--> order.created.v1 no runtime
--> filas por consumidor
--> retry/DLQ
--> E2E distribuído no CI
--> correlação/observabilidade
+core de confiabilidade concluído
+-> integração dedicada RabbitMQ + Outbox
+-> auditoria de dependências mais abrangente
+-> observabilidade operacional completa
+-> escolher uma diferenciação principal: Cloud/IaC ou ML integrado
 ```
 
-Para detalhes e trade-offs, consulte:
-
-- [`../05-evolucao/AUDITORIA_ESTADO_ATUAL.md`](../05-evolucao/AUDITORIA_ESTADO_ATUAL.md)
-- [`../05-evolucao/PLANO_EVOLUCAO_ARQUITETURAL.md`](../05-evolucao/PLANO_EVOLUCAO_ARQUITETURAL.md)
-- [`../../ROADMAP.md`](../../ROADMAP.md)
+A evolução deve aumentar evidência de engenharia, não quantidade artificial de componentes.

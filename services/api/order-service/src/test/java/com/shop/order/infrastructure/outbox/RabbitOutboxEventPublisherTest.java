@@ -19,7 +19,8 @@ class RabbitOutboxEventPublisherTest {
   @Test
   void returnsOnlyAfterBrokerAck() {
     RabbitTemplate template = org.mockito.Mockito.mock(RabbitTemplate.class);
-    var publisher = new RabbitOutboxEventPublisher(template, 1000);
+    var publisher =
+        new RabbitOutboxEventPublisher(template, 1000, "order.exchange", "order.created");
     var event = pendingEvent();
 
     doAnswer(
@@ -48,7 +49,8 @@ class RabbitOutboxEventPublisherTest {
   @Test
   void failsWhenBrokerNacksEvent() {
     RabbitTemplate template = org.mockito.Mockito.mock(RabbitTemplate.class);
-    var publisher = new RabbitOutboxEventPublisher(template, 1000);
+    var publisher =
+        new RabbitOutboxEventPublisher(template, 1000, "order.exchange", "order.created");
     var event = pendingEvent();
 
     doAnswer(

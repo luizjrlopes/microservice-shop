@@ -10,9 +10,9 @@ import com.shop.order.application.ports.OutboxRepository;
 import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
-import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
@@ -23,12 +23,17 @@ class PublishPendingOutboxEventsServiceTest {
 
   @Mock private OutboxEventPublisher publisher;
 
-  @InjectMocks private PublishPendingOutboxEventsService service;
+  private PublishPendingOutboxEventsService service;
+
+  @BeforeEach
+  void setUp() {
+    service = new PublishPendingOutboxEventsService(repository, publisher, 50);
+  }
 
   @Test
   void marksEventPublishedOnlyAfterPublisherSucceeds() {
     var event = pendingEvent();
-    when(repository.findPending(0)).thenReturn(List.of(event));
+    when(repository.findPending(50)).thenReturn(List.of(event));
 
     service.publishPending();
 
@@ -44,7 +49,7 @@ class PublishPendingOutboxEventsServiceTest {
   @Test
   void keepsEventPendingAndRecordsFailureWhenPublisherFails() {
     var event = pendingEvent();
-    when(repository.findPending(0)).thenReturn(List.of(event));
+    when(repository.findPending(50)).thenReturn(List.of(event));
     org.mockito.Mockito.doThrow(new IllegalStateException("broker unavailable"))
         .when(publisher)
         .publish(event);
