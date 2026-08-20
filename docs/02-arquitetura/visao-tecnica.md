@@ -4,15 +4,15 @@
 
 ## Stack atual
 
-| Componente | Linguagem | Framework / libs | Comunicação |
-|---|---|---|---|
-| `order-service` | Java 25 | Spring Boot 3, Spring AMQP, Spring Data JPA, Flyway | HTTP + SQL + AMQP |
-| PostgreSQL | — | PostgreSQL 16 | SQL |
-| `scheduler-agent` | Python 3.11 | pika, requests, prometheus-client | AMQP + HTTP |
-| `tests/bdd` | TypeScript | Cucumber, Axios, amqplib | HTTP + AMQP |
-| Prometheus | — | Prometheus | HTTP scrape |
-| `ml/experiments` | Python | pandas, scikit-learn | scripts standalone |
-| RabbitMQ | — | RabbitMQ | AMQP |
+| Componente        | Linguagem   | Framework / libs                                    | Comunicação        |
+| ----------------- | ----------- | --------------------------------------------------- | ------------------ |
+| `order-service`   | Java 25     | Spring Boot 3, Spring AMQP, Spring Data JPA, Flyway | HTTP + SQL + AMQP  |
+| PostgreSQL        | —           | PostgreSQL 16                                       | SQL                |
+| `scheduler-agent` | Python 3.11 | pika, requests, prometheus-client                   | AMQP + HTTP        |
+| `tests/bdd`       | TypeScript  | Cucumber, Axios, amqplib                            | HTTP + AMQP        |
+| Prometheus        | —           | Prometheus                                          | HTTP scrape        |
+| `ml/experiments`  | Python      | pandas, scikit-learn                                | scripts standalone |
+| RabbitMQ          | —           | RabbitMQ                                            | AMQP               |
 
 `ml/llm` continua experimental; não representa uma feature integrada ao runtime.
 

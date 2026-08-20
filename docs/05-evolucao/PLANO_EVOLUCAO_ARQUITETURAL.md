@@ -247,30 +247,30 @@ OpenTelemetry/Prometheus devem entrar em **profile opcional de observabilidade**
 
 ## 4. Matriz de gaps
 
-| Prioridade | Gap | Decisão |
-|---|---|---|
-| **CRÍTICO** | ACK mesmo quando HTTP falha | corrigir antes de qualquer expansão |
-| **CRÍTICO** | sem retry/DLQ | implementar semântica at-least-once |
-| **CRÍTICO** | dual write Order + RabbitMQ | Transactional Outbox |
-| **CRÍTICO** | E2E não prova ciclo completo | criar happy path real no CI |
-| **ALTO VALOR** | persistência em memória | PostgreSQL + migrações |
-| **ALTO VALOR** | evento sem envelope/versionamento | contrato `order.created.v1` |
-| **ALTO VALOR** | fila conflada com nome do evento | fila específica por consumidor |
-| **ALTO VALOR** | domínio permissivo | enum + invariantes + erros explícitos |
-| **ALTO VALOR** | estado assíncrono não consultável | `GET /orders/{id}` |
-| **ALTO VALOR** | CI não determinístico/E2E ausente | pipeline em 4 gates |
-| **ALTO VALOR** | documentação contraditória | consolidar fontes canônicas |
-| **MELHORIA** | logs sem correlação | JSON + IDs + duração |
-| **MELHORIA** | ausência de métricas | Micrometer/Prometheus e worker metrics |
-| **MELHORIA** | ausência de tracing | OpenTelemetry após estabilização |
-| **MELHORIA** | containers básicos | usuário não-root e hardening |
-| **NÃO AGORA** | `catalog-service` | não aumenta a tese central |
-| **NÃO AGORA** | `auth-service` separado | complexidade sem ganho proporcional |
-| **NÃO AGORA** | `payment-service` | fora do fluxo que queremos aprofundar |
-| **NÃO AGORA** | frontend | não fortalece confiabilidade distribuída |
-| **NÃO AGORA** | Kubernetes | overhead de plataforma prematuro |
-| **NÃO AGORA** | LLM/AI Advisor | não existe feature LLM real para justificar runtime |
-| **NÃO AGORA** | múltiplas clouds | dispersa o projeto |
+| Prioridade     | Gap                               | Decisão                                             |
+| -------------- | --------------------------------- | --------------------------------------------------- |
+| **CRÍTICO**    | ACK mesmo quando HTTP falha       | corrigir antes de qualquer expansão                 |
+| **CRÍTICO**    | sem retry/DLQ                     | implementar semântica at-least-once                 |
+| **CRÍTICO**    | dual write Order + RabbitMQ       | Transactional Outbox                                |
+| **CRÍTICO**    | E2E não prova ciclo completo      | criar happy path real no CI                         |
+| **ALTO VALOR** | persistência em memória           | PostgreSQL + migrações                              |
+| **ALTO VALOR** | evento sem envelope/versionamento | contrato `order.created.v1`                         |
+| **ALTO VALOR** | fila conflada com nome do evento  | fila específica por consumidor                      |
+| **ALTO VALOR** | domínio permissivo                | enum + invariantes + erros explícitos               |
+| **ALTO VALOR** | estado assíncrono não consultável | `GET /orders/{id}`                                  |
+| **ALTO VALOR** | CI não determinístico/E2E ausente | pipeline em 4 gates                                 |
+| **ALTO VALOR** | documentação contraditória        | consolidar fontes canônicas                         |
+| **MELHORIA**   | logs sem correlação               | JSON + IDs + duração                                |
+| **MELHORIA**   | ausência de métricas              | Micrometer/Prometheus e worker metrics              |
+| **MELHORIA**   | ausência de tracing               | OpenTelemetry após estabilização                    |
+| **MELHORIA**   | containers básicos                | usuário não-root e hardening                        |
+| **NÃO AGORA**  | `catalog-service`                 | não aumenta a tese central                          |
+| **NÃO AGORA**  | `auth-service` separado           | complexidade sem ganho proporcional                 |
+| **NÃO AGORA**  | `payment-service`                 | fora do fluxo que queremos aprofundar               |
+| **NÃO AGORA**  | frontend                          | não fortalece confiabilidade distribuída            |
+| **NÃO AGORA**  | Kubernetes                        | overhead de plataforma prematuro                    |
+| **NÃO AGORA**  | LLM/AI Advisor                    | não existe feature LLM real para justificar runtime |
+| **NÃO AGORA**  | múltiplas clouds                  | dispersa o projeto                                  |
 
 ---
 
@@ -768,20 +768,20 @@ Não iniciar A e B simultaneamente antes de as ondas anteriores estarem estávei
 
 A PR #13 é laboratório de descoberta, não base de merge.
 
-| Item explorado | Decisão | Motivo |
-|---|---|---|
-| timeout HTTP no worker | **REAPROVEITAR CONCEITO** | requisito de confiabilidade |
-| ACK somente após sucesso | **REAPROVEITAR CONCEITO** | corrige perda de mensagens |
-| retry + DLQ | **REAPROVEITAR CONCEITO, REDESENHAR TOPOLOGIA** | filas devem pertencer ao consumidor |
-| logs JSON | **REAPROVEITAR CONCEITO** | base de observabilidade |
-| `eventId`/timestamp/correlation | **REAPROVEITAR CONCEITO** | contrato distribuído |
-| confirmação repetida segura | **REAPROVEITAR CONCEITO** | necessária para at-least-once |
-| CI em 4 gates | **REAPROVEITAR E REFAZER LIMPO** | boa estrutura, branch ficou iterativa |
-| artifacts com logs do Compose | **REAPROVEITAR** | diagnóstico de E2E |
-| declaração da mesma topologia em Java e Python | **DESCARTAR** | risco de conflito/drift |
-| apenas melhorar publisher direto após `save` | **DESCARTAR** | não resolve dual write |
-| header `Idempotency-Key` sem armazenamento/semântica real | **DESCARTAR POR ENQUANTO** | não prometer idempotência que não é aplicada |
-| merge integral dos 42 commits | **DESCARTAR** | histórico exploratório, não implementação coerente |
+| Item explorado                                            | Decisão                                         | Motivo                                             |
+| --------------------------------------------------------- | ----------------------------------------------- | -------------------------------------------------- |
+| timeout HTTP no worker                                    | **REAPROVEITAR CONCEITO**                       | requisito de confiabilidade                        |
+| ACK somente após sucesso                                  | **REAPROVEITAR CONCEITO**                       | corrige perda de mensagens                         |
+| retry + DLQ                                               | **REAPROVEITAR CONCEITO, REDESENHAR TOPOLOGIA** | filas devem pertencer ao consumidor                |
+| logs JSON                                                 | **REAPROVEITAR CONCEITO**                       | base de observabilidade                            |
+| `eventId`/timestamp/correlation                           | **REAPROVEITAR CONCEITO**                       | contrato distribuído                               |
+| confirmação repetida segura                               | **REAPROVEITAR CONCEITO**                       | necessária para at-least-once                      |
+| CI em 4 gates                                             | **REAPROVEITAR E REFAZER LIMPO**                | boa estrutura, branch ficou iterativa              |
+| artifacts com logs do Compose                             | **REAPROVEITAR**                                | diagnóstico de E2E                                 |
+| declaração da mesma topologia em Java e Python            | **DESCARTAR**                                   | risco de conflito/drift                            |
+| apenas melhorar publisher direto após `save`              | **DESCARTAR**                                   | não resolve dual write                             |
+| header `Idempotency-Key` sem armazenamento/semântica real | **DESCARTAR POR ENQUANTO**                      | não prometer idempotência que não é aplicada       |
+| merge integral dos 42 commits                             | **DESCARTAR**                                   | histórico exploratório, não implementação coerente |
 
 ---
 

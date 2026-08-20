@@ -1,5 +1,5 @@
 # syntax=docker/dockerfile:1
-FROM maven:3.9.6-eclipse-temurin-25 AS build
+FROM maven:3.9.16-eclipse-temurin-25 AS build
 WORKDIR /app
 COPY pom.xml .
 RUN mvn -q dependency:go-offline

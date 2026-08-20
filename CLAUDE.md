@@ -38,12 +38,12 @@
 
 ## Onde estão as coisas
 
-| O que | Onde |
-|-------|------|
-| Serviço de pedidos (Java) | `services/api/order-service/` |
+| O que                          | Onde                                |
+| ------------------------------ | ----------------------------------- |
+| Serviço de pedidos (Java)      | `services/api/order-service/`       |
 | Worker de confirmação (Python) | `services/workers/scheduler-agent/` |
-| Testes BDD | `tests/bdd/` |
-| Experimentos ML/LLM | `ml/` |
-| Documentação de arquitetura | `docs/architecture.md` |
-| Variáveis de ambiente | `docs/setup.md` + esta doc |
-| Roadmap | `ROADMAP.md` |
+| Testes BDD                     | `tests/bdd/`                        |
+| Experimentos ML/LLM            | `ml/`                               |
+| Documentação de arquitetura    | `docs/architecture.md`              |
+| Variáveis de ambiente          | `docs/setup.md` + esta doc          |
+| Roadmap                        | `ROADMAP.md`                        |

@@ -37,6 +37,7 @@ Demonstrar, num repositório coeso e bem documentado, que o candidato sabe const
 ## Fluxos principais
 
 ### Fluxo principal: Criar e confirmar pedido
+
 1. Cliente faz `POST /orders` com `{ productId, quantity }`
 2. order-service cria pedido (in-memory), retorna `{ id }`
 3. order-service publica evento `order.created` no RabbitMQ
@@ -45,6 +46,7 @@ Demonstrar, num repositório coeso e bem documentado, que o candidato sabe const
 6. Pedido muda de status para confirmado
 
 ### Fluxo BDD
+
 1. Cenário Cucumber descreve criação de pedido e verificação de mensagem
 2. Steps em TypeScript chamam a API e verificam o RabbitMQ
 

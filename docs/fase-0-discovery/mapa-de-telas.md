@@ -16,20 +16,20 @@
 
 ## Endpoints do order-service
 
-| Método | Rota | Descrição |
-|--------|------|-----------|
-| POST | `/orders` | Criar pedido, publicar evento |
-| POST | `/orders/{id}/confirm` | Confirmar pedido (chamado pelo scheduler) |
-| GET | `/actuator/health` | Health check Spring Boot |
+| Método | Rota                   | Descrição                                 |
+| ------ | ---------------------- | ----------------------------------------- |
+| POST   | `/orders`              | Criar pedido, publicar evento             |
+| POST   | `/orders/{id}/confirm` | Confirmar pedido (chamado pelo scheduler) |
+| GET    | `/actuator/health`     | Health check Spring Boot                  |
 
 ## Componentes por pasta
 
-| Pasta | Componente | Linguagem |
-|-------|-----------|-----------|
-| `services/api/order-service` | API HTTP + publisher AMQP | Java 25 + Spring Boot |
-| `services/workers/scheduler-agent` | Worker AMQP consumer | Python 3.11 |
-| `tests/bdd` | Testes BDD E2E | TypeScript + Cucumber |
-| `ml/experiments/demand-forecasting` | Modelo de previsão de demanda | Python + ML |
-| `ml/experiments/order-anomaly-detection` | Detecção de anomalias | Python + ML |
-| `ml/llm` | Experimentos LLM | Python + LangChain/OpenAI |
-| `infra/terraform` | IaC (stub) | Terraform |
+| Pasta                                    | Componente                    | Linguagem                 |
+| ---------------------------------------- | ----------------------------- | ------------------------- |
+| `services/api/order-service`             | API HTTP + publisher AMQP     | Java 25 + Spring Boot     |
+| `services/workers/scheduler-agent`       | Worker AMQP consumer          | Python 3.11               |
+| `tests/bdd`                              | Testes BDD E2E                | TypeScript + Cucumber     |
+| `ml/experiments/demand-forecasting`      | Modelo de previsão de demanda | Python + ML               |
+| `ml/experiments/order-anomaly-detection` | Detecção de anomalias         | Python + ML               |
+| `ml/llm`                                 | Experimentos LLM              | Python + LangChain/OpenAI |
+| `infra/terraform`                        | IaC (stub)                    | Terraform                 |

@@ -21,23 +21,23 @@ flowchart LR
 
 ## Componentes
 
-| Componente | Tecnologia | Responsabilidade implementada |
-|---|---|---|
-| `order-service` | Java 25 + Spring Boot | cria, consulta e confirma pedidos; persiste Outbox; publica eventos pendentes |
-| PostgreSQL | PostgreSQL 16 | persiste pedidos e `outbox_events` |
-| Flyway | Flyway | versiona schemas de pedidos e Outbox |
-| RabbitMQ | AMQP | transporta `order.created.v1`, retry e DLQ |
-| `scheduler-agent` | Python 3.11 + pika + requests | consome evento, confirma pedido e aplica política de retry/DLQ |
-| Prometheus | profile Compose opcional | coleta métricas do serviço e do worker |
-| `tests/bdd` | TypeScript + Cucumber | prova fluxo HTTP + AMQP distribuído |
+| Componente        | Tecnologia                    | Responsabilidade implementada                                                 |
+| ----------------- | ----------------------------- | ----------------------------------------------------------------------------- |
+| `order-service`   | Java 25 + Spring Boot         | cria, consulta e confirma pedidos; persiste Outbox; publica eventos pendentes |
+| PostgreSQL        | PostgreSQL 16                 | persiste pedidos e `outbox_events`                                            |
+| Flyway            | Flyway                        | versiona schemas de pedidos e Outbox                                          |
+| RabbitMQ          | AMQP                          | transporta `order.created.v1`, retry e DLQ                                    |
+| `scheduler-agent` | Python 3.11 + pika + requests | consome evento, confirma pedido e aplica política de retry/DLQ                |
+| Prometheus        | profile Compose opcional      | coleta métricas do serviço e do worker                                        |
+| `tests/bdd`       | TypeScript + Cucumber         | prova fluxo HTTP + AMQP distribuído                                           |
 
 ## Contratos HTTP
 
-| Método | Rota | Comportamento |
-|---|---|---|
-| `POST` | `/orders` | cria pedido `PENDING` e retorna `201` |
-| `GET` | `/orders/{id}` | retorna o estado persistido |
-| `POST` | `/orders/{id}/confirm` | confirma o pedido; repetição segura |
+| Método | Rota                   | Comportamento                         |
+| ------ | ---------------------- | ------------------------------------- |
+| `POST` | `/orders`              | cria pedido `PENDING` e retorna `201` |
+| `GET`  | `/orders/{id}`         | retorna o estado persistido           |
+| `POST` | `/orders/{id}/confirm` | confirma o pedido; repetição segura   |
 
 Entradas inválidas retornam `400`; pedido inexistente retorna `404`.
 
@@ -58,15 +58,15 @@ Isso remove a antiga janela de dual write `commit PostgreSQL -> publish RabbitMQ
 
 ## Contrato AMQP
 
-| Item | Valor |
-|---|---|
-| Exchange | `orders.events` |
-| Tipo | `topic` |
-| Routing key | `order.created.v1` |
-| Fila do scheduler | `scheduler.order-created.v1` |
-| Retry queue | `scheduler.order-created.retry.v1` |
-| DLQ | `scheduler.order-created.dlq.v1` |
-| Contrato | `contracts/events/order-created-v1.schema.json` + `contracts/asyncapi.yaml` |
+| Item              | Valor                                                                       |
+| ----------------- | --------------------------------------------------------------------------- |
+| Exchange          | `orders.events`                                                             |
+| Tipo              | `topic`                                                                     |
+| Routing key       | `order.created.v1`                                                          |
+| Fila do scheduler | `scheduler.order-created.v1`                                                |
+| Retry queue       | `scheduler.order-created.retry.v1`                                          |
+| DLQ               | `scheduler.order-created.dlq.v1`                                            |
+| Contrato          | `contracts/events/order-created-v1.schema.json` + `contracts/asyncapi.yaml` |
 
 O envelope contém `eventId`, `eventType`, `eventVersion`, `correlationId` e `payload`. O publisher também propaga IDs relevantes em propriedades AMQP.
 

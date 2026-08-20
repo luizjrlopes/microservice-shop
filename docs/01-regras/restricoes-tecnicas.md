@@ -2,14 +2,14 @@
 
 ## Stack por componente (não mudar sem ADR)
 
-| Componente | Tecnologia | Versão mínima |
-|-----------|-----------|--------------|
-| order-service | Java + Spring Boot | 25 / 3.x |
-| scheduler-agent | Python | 3.11 |
-| Testes BDD | Node.js + TypeScript + Cucumber | 18 / 10+ |
-| Mensageria | RabbitMQ | 3 |
-| Infra local | Docker + Docker Compose | v2 |
-| Experimentos ML | Python + scikit-learn | 3.11 |
+| Componente      | Tecnologia                      | Versão mínima |
+| --------------- | ------------------------------- | ------------- |
+| order-service   | Java + Spring Boot              | 25 / 3.x      |
+| scheduler-agent | Python                          | 3.11          |
+| Testes BDD      | Node.js + TypeScript + Cucumber | 18 / 10+      |
+| Mensageria      | RabbitMQ                        | 3             |
+| Infra local     | Docker + Docker Compose         | v2            |
+| Experimentos ML | Python + scikit-learn           | 3.11          |
 
 ## Restrições de design
 
